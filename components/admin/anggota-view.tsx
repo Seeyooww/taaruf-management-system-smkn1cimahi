@@ -151,7 +151,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
           return [
             {
               ...formValues,
-              id: res.data?.id || formValues.id || `ang-${Date.now()}`,
+              id: (res as { data?: { id?: string } }).data?.id || formValues.id || `ang-${Date.now()}`,
               created_at: new Date().toISOString(),
               kelompok_nama: kName,
             },

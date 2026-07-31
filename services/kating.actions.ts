@@ -27,8 +27,8 @@ export async function saveKatingAction(formData: FormData) {
     };
   }
 
-  await saveKating({ id, nama, kelas, jenis_kelamin, nomor_whatsapp, aktif });
-  return { success: true, message: "Data Kating berhasil disimpan." };
+  const res = await saveKating({ id, nama, kelas, jenis_kelamin, nomor_whatsapp, aktif });
+  return { success: true, message: "Data Kating berhasil disimpan.", data: res.data };
 }
 
 export async function deleteKatingAction(id: string) {

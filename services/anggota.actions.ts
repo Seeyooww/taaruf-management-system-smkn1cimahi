@@ -26,8 +26,8 @@ export async function saveAnggotaAction(formData: FormData) {
     };
   }
 
-  await saveAnggota({ id, kelompok_id, nama, jenis_kelamin, aktif });
-  return { success: true, message: "Data Anggota berhasil disimpan." };
+  const res = await saveAnggota({ id, kelompok_id, nama, jenis_kelamin, aktif });
+  return { success: true, message: "Data Anggota berhasil disimpan.", data: res.data };
 }
 
 export async function deleteAnggotaAction(id: string) {

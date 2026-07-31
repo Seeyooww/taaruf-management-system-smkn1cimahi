@@ -80,7 +80,7 @@ export function AnnouncementView({ initialAnnouncements }: AnnouncementViewProps
           return [
             {
               ...formValues,
-              id: res.data?.id || formValues.id || `ann-${Date.now()}`,
+              id: (res as { data?: { id?: string } }).data?.id || formValues.id || `ann-${Date.now()}`,
               created_at: new Date().toISOString(),
             },
             ...prev,

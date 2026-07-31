@@ -21,8 +21,8 @@ export async function saveSlotAction(formData: FormData) {
     };
   }
 
-  await saveSlot({ id, nama_slot, jam_mulai, jam_selesai, urutan, aktif });
-  return { success: true, message: "Slot Waktu berhasil disimpan." };
+  const res = await saveSlot({ id, nama_slot, jam_mulai, jam_selesai, urutan, aktif });
+  return { success: true, message: "Slot Waktu berhasil disimpan.", data: res.data };
 }
 
 export async function deleteSlotAction(id: string) {

@@ -23,8 +23,8 @@ export async function saveAnnouncementAction(formData: FormData) {
     };
   }
 
-  await saveAnnouncement({ id, judul, isi, aktif });
-  return { success: true, message: "Pengumuman berhasil disimpan." };
+  const res = await saveAnnouncement({ id, judul, isi, aktif });
+  return { success: true, message: "Pengumuman berhasil disimpan.", data: res };
 }
 
 export async function deleteAnnouncementAction(id: string) {
