@@ -95,7 +95,7 @@ export function SlotView({ initialSlotList }: SlotViewProps) {
           }
           return [
             ...prev,
-            { id: `slot-${Date.now()}`, ...formValues },
+            { ...formValues, id: res.data?.id || formValues.id || `slot-${Date.now()}` },
           ].sort((a, b) => a.urutan - b.urutan);
         });
       } else {

@@ -149,8 +149,8 @@ export function KatingView({ initialKating }: KatingViewProps) {
           }
           return [
             {
-              id: `kat-${Date.now()}`,
               ...formValues,
+              id: res.data?.id || formValues.id || `kat-${Date.now()}`,
               created_at: new Date().toISOString(),
             },
             ...prev,

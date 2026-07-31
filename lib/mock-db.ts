@@ -2,7 +2,6 @@ import type {
   Anggota,
   AnggotaProgressSummary,
   Announcement,
-  Booking,
   BookingParticipant,
   BookingStatus,
   BookingWithDetails,

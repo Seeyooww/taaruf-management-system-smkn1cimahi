@@ -79,13 +79,13 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
         item.nama.toLowerCase().includes(query) ||
         (item.kelompok_nama && item.kelompok_nama.toLowerCase().includes(query)) ||
         statusLabel.includes(query);
-      
+
       const matchStatus =
         statusFilter === "all"
           ? true
           : statusFilter === "active"
-          ? item.aktif
-          : !item.aktif;
+            ? item.aktif
+            : !item.aktif;
 
       const matchKelompok =
         kelompokFilter === "all" ? true : item.kelompok_id === kelompokFilter;
@@ -150,8 +150,8 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
           }
           return [
             {
-              id: `ang-${Date.now()}`,
               ...formValues,
+              id: res.data?.id || formValues.id || `ang-${Date.now()}`,
               created_at: new Date().toISOString(),
               kelompok_nama: kName,
             },
