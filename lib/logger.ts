@@ -1,29 +1,27 @@
 const isProd = process.env.NODE_ENV === "production";
 
 export const logger = {
-  info: (message: string, ...meta: any[]) => {
+  info: (message: string, ...meta: unknown[]) => {
     if (!isProd) {
       console.log(`[INFO] ${message}`, ...meta);
     }
   },
-  warn: (message: string, ...meta: any[]) => {
+  warn: (message: string, ...meta: unknown[]) => {
     if (!isProd) {
       console.warn(`[WARN] ${message}`, ...meta);
     }
   },
-  error: (message: string, error?: any) => {
+  error: (message: string, error?: unknown) => {
     if (!isProd) {
       console.error(`[ERROR] ${message}`, error || "");
     } else {
-      // Production Logger Wrapper
-      // Avoids raw console dumping in production stdout/stderr
+      const errObj = error as { digest?: string; message?: string } | undefined;
       const logPayload = {
         level: "error",
         timestamp: new Date().toISOString(),
         message,
-        digest: error?.digest || error?.message || String(error || ""),
+        digest: errObj?.digest || errObj?.message || String(error || ""),
       };
-      // Structured log formatting
       process.stderr.write(JSON.stringify(logPayload) + "\n");
     }
   },

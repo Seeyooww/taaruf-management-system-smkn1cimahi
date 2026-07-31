@@ -248,7 +248,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
               <select
                 value={genderFilter}
                 onChange={(e) => {
-                  setGenderFilter(e.target.value as any);
+                  setGenderFilter(e.target.value as "all" | "L" | "P");
                   setPage(1);
                 }}
                 className="h-8 rounded-md border border-input bg-background px-2 text-xs"
@@ -261,7 +261,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
               <select
                 value={statusFilter}
                 onChange={(e) => {
-                  setStatusFilter(e.target.value as any);
+                  setStatusFilter(e.target.value as "all" | "active" | "inactive");
                   setPage(1);
                 }}
                 className="h-8 rounded-md border border-input bg-background px-2 text-xs"

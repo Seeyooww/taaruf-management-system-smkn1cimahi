@@ -5,7 +5,7 @@ import { getAnggotaProgressAction } from "@/services/progress.actions";
 import { getSessionProfile } from "@/services/auth.service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
   Activity,
@@ -15,7 +15,6 @@ import {
   Clock,
   Sparkles,
   Target,
-  UserCheck,
 } from "lucide-react";
 
 export const metadata = {

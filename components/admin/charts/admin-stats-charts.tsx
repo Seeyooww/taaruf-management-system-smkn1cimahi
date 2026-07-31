@@ -11,7 +11,6 @@ import {
   Clock,
   PieChart as PieIcon,
   TrendingUp,
-  XCircle,
 } from "lucide-react";
 import type { AnalyticsData } from "@/services/reporting.service";
 

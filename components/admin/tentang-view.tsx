@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Award, Code2, Heart, Info, ShieldCheck, Sparkles } from "lucide-react";
+import { Code2, Info, ShieldCheck, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 

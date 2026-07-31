@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge";
 import { CommandPalette } from "@/components/ui/command-palette";
 import {
   Activity,
-  Award,
   Bell,
   CalendarCheck,
   CheckCircle2,
@@ -20,9 +19,7 @@ import {
   Database,
   Plus,
   Radio,
-  Shield,
   Sparkles,
-  UserCheck,
   Users,
   XCircle,
 } from "lucide-react";
@@ -36,9 +33,9 @@ export default async function AdminDashboardPage() {
   const session = await getSessionProfile();
 
   const [
-    kelompokList,
+    _kelompokList,
     anggotaList,
-    katingList,
+    _katingList,
     bookingList,
     progressSummaries,
     analyticsData,
@@ -53,9 +50,7 @@ export default async function AdminDashboardPage() {
     getLiveActiveSessionsAction(),
   ]);
 
-  const totalKelompok = kelompokList.length;
   const totalAnggota = anggotaList.length;
-  const totalKating = katingList.length;
 
   const todayStr = new Date().toISOString().split("T")[0];
   const bookingHariIni = bookingList.filter((b) => b.tanggal === todayStr).length;

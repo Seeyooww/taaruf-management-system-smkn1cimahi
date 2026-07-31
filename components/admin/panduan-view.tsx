@@ -6,14 +6,13 @@ import {
   BookOpen,
   CalendarCheck,
   CheckCircle2,
-  HelpCircle,
   MessageSquare,
   Shield,
   UserCheck,
   Users,
 } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function PanduanView() {
   const [activeTab, setActiveTab] = React.useState<"admin" | "kelompok">("admin");

@@ -63,6 +63,7 @@ export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
 
   // Group navigation items by category
   const categories = React.useMemo(() => {
+    const navItems = DASHBOARD_NAVIGATION[role] || [];
     const map = new Map<string, typeof navItems>();
     navItems.forEach((item) => {
       const cat = item.category || "Utama";
@@ -70,7 +71,7 @@ export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
       map.get(cat)!.push(item);
     });
     return Array.from(map.entries());
-  }, [navItems]);
+  }, [role]);
 
   return (
     <aside

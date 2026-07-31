@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   Activity,
   CheckCircle2,
-  Download,
   FileSpreadsheet,
   Printer,
   Search,

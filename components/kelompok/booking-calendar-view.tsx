@@ -1,10 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Calendar as CalendarIcon, CheckCircle2, Clock, Info } from "lucide-react";
+import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import type { BookingWithDetails, EventSettings, SlotWaktu } from "@/types/database";
 
 interface BookingCalendarViewProps {

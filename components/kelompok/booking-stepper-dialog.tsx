@@ -12,8 +12,6 @@ import {
   MessageSquare,
   Search,
   Shield,
-  UserCheck,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -116,7 +114,7 @@ export function BookingStepperDialog({
     if (step >= 3) {
       loadAvailableKating();
     }
-  }, [step, tanggal, selectedSlot?.id]);
+  }, [step, tanggal, selectedSlot?.id, loadAvailableKating]);
 
   const handleSelectAkang = (kat: Kating) => {
     setSelectedAkang(kat);

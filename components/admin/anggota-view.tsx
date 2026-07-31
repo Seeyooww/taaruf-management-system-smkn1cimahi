@@ -251,7 +251,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
               <select
                 value={statusFilter}
                 onChange={(e) => {
-                  setStatusFilter(e.target.value as any);
+                  setStatusFilter(e.target.value as "all" | "active" | "inactive");
                   setPage(1);
                 }}
                 className="h-8 rounded-md border border-input bg-background px-2 text-xs"

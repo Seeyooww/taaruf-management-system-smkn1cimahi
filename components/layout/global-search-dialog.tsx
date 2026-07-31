@@ -11,11 +11,9 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -107,6 +105,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl p-0 overflow-hidden">
+        <DialogTitle className="sr-only">Pencarian Global</DialogTitle>
         {/* Search Header */}
         <div className="flex items-center px-4 border-b border-border bg-card">
           <Search className="size-5 text-muted-foreground shrink-0" />
