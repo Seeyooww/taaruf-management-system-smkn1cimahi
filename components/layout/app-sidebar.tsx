@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -107,7 +108,7 @@ export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href as Route}
                   onClick={onNavClick}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all group relative",

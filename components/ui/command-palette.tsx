@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -85,7 +86,7 @@ export function CommandPalette() {
   const handleSelect = (href: string) => {
     setOpen(false);
     setQuery("");
-    router.push(href);
+    router.push(href as Route);
   };
 
   return (
