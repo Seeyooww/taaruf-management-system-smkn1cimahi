@@ -54,6 +54,17 @@ export interface Booking {
   teteh_contacted_at?: string | null;
 }
 
+export interface BookingWithDetails extends Booking {
+  kelompok_nama?: string;
+  slot_nama?: string;
+  jam_mulai?: string;
+  jam_selesai?: string;
+  kating_laki_nama?: string;
+  kating_perempuan_nama?: string;
+  kating_laki_wa?: string;
+  kating_perempuan_wa?: string;
+}
+
 export interface BookingParticipant {
   id: string;
   booking_id: string;

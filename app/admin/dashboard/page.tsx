@@ -33,9 +33,9 @@ export default async function AdminDashboardPage() {
   const session = await getSessionProfile();
 
   const [
-    _kelompokList,
+    ,
     anggotaList,
-    _katingList,
+    ,
     bookingList,
     progressSummaries,
     analyticsData,

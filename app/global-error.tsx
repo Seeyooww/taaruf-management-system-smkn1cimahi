@@ -26,6 +26,11 @@ export default function GlobalError({
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
               Coba muat ulang halaman untuk melanjutkan operasional Taaruf Management System.
             </p>
+            {_error.digest && (
+              <p className="font-mono text-[10px] text-muted-foreground/60">
+                Error Digest: {_error.digest}
+              </p>
+            )}
           </div>
 
           <div className="flex justify-center gap-3 pt-2">

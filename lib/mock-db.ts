@@ -5,6 +5,7 @@ import type {
   Booking,
   BookingParticipant,
   BookingStatus,
+  BookingWithDetails,
   EventSettings,
   Gender,
   Kating,
@@ -15,16 +16,7 @@ import type {
   WhatsAppTemplate,
 } from "@/types/database";
 
-export interface BookingWithDetails extends Booking {
-  kelompok_nama?: string;
-  slot_nama?: string;
-  jam_mulai?: string;
-  jam_selesai?: string;
-  kating_laki_nama?: string;
-  kating_perempuan_nama?: string;
-  kating_laki_wa?: string;
-  kating_perempuan_wa?: string;
-}
+export type { BookingWithDetails };
 
 // In-Memory Seed Data State
 let mockSettings: EventSettings = {

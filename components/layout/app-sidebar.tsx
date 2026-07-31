@@ -58,7 +58,6 @@ function getNavIcon(href: string) {
 
 export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
   const pathname = usePathname();
-  const navItems = DASHBOARD_NAVIGATION[role] || [];
   const roleLabel = getRoleLabel(role);
 
   // Group navigation items by category
