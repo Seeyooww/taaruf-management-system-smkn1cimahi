@@ -87,11 +87,15 @@ export function TentangView() {
               <Info className="size-4 text-blue-500" /> Hak Cipta & Lisensi
             </CardTitle>
           </CardHeader>
+
           <CardContent className="text-xs text-muted-foreground space-y-2">
             <p>
-              Hak Cipta &copy; 2026 <strong>Taaruf Management System (TMS)</strong>. Seluruh hak cipta dilindungi undang-undang. Didedikasikan untuk kelancaran kegiatan Taaruf di SMKN 1 Cimahi.
+              Hak Cipta &copy; 2026{" "}
+              <strong>Taaruf Management System (TMS)</strong>. Seluruh hak cipta
+              dilindungi undang-undang. Didedikasikan untuk kelancaran kegiatan
+              Taaruf di SMKN 1 Cimahi.
             </p>
-          </div >
+          </CardContent>
         </Card>
       </div>
     </div>
