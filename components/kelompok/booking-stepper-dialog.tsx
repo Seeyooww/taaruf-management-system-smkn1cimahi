@@ -67,7 +67,7 @@ export function BookingStepperDialog({
   const [selectedKatingIds, setSelectedKatingIds] = React.useState<Set<string>>(new Set());
   const [catatan, setCatatan] = React.useState("");
   const [jamPulang, setJamPulang] = React.useState("16:30");
-  const [tempatTaaruf, setTempatTaaruf] = React.useState("Masjid SMKN 1 Cimahi");
+  const [tempatTaaruf, setTempatTaaruf] = React.useState("");
 
   // Kating list state
   const [allKatingList, setAllKatingList] = React.useState<Kating[]>([]);
@@ -189,7 +189,7 @@ export function BookingStepperDialog({
         setSelectedKatingIds(new Set());
         setCatatan("");
         setJamPulang("16:30");
-        setTempatTaaruf("Masjid SMKN 1 Cimahi");
+        setTempatTaaruf("");
       } else {
         toast.error(`❌ ${res.message}`);
       }

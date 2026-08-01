@@ -6,6 +6,7 @@ import { Bell, Menu, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { ThemeSwitch } from "@/components/common/theme-switch";
+import { ActiveUsersWidget } from "@/components/layout/active-users-widget";
 import { GlobalSearchDialog } from "@/components/layout/global-search-dialog";
 import { UserMenu } from "@/components/layout/user-menu";
 import {
@@ -122,6 +123,9 @@ export function AppNavbar({
             <Bell className="size-4" />
             <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary animate-pulse" />
           </Button>
+
+          {/* Active Online Users Widget */}
+          <ActiveUsersWidget />
 
           {/* Theme Switcher */}
           <ThemeSwitch />

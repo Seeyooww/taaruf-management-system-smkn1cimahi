@@ -75,33 +75,11 @@ let mockAnnouncements: Announcement[] = [
   },
 ];
 
-let mockBookingList: BookingWithDetails[] = [
-  {
-    id: "book-1",
-    kelompok_id: "kel-1",
-    tanggal: "2026-08-03",
-    slot_id: "slot-2",
-    status: "Menunggu Konfirmasi",
-    catatan: "Pengajuan awal",
-    created_at: "2026-07-30T11:00:00Z",
-    kelompok_nama: "Kelompok 1 (X SIJA 1)",
-    slot_nama: "Istirahat 2",
-    jam_mulai: "12:00",
-    jam_selesai: "12:45",
-    kating_list: [
-      { id: "kat-1", nama: "Akang Fikri Haikal", jenis_kelamin: "L", nomor_whatsapp: "081234567890", contacted: false, contacted_at: null },
-      { id: "kat-2", nama: "Teteh Anisa Fitri", jenis_kelamin: "P", nomor_whatsapp: "081987654321", contacted: false, contacted_at: null },
-    ],
-  },
-];
+let mockBookingList: BookingWithDetails[] = [];
 
 let mockBookingParticipantsList: BookingParticipant[] = [];
 
-let mockProgressList: ProgressRecord[] = [
-  { id: "prog-1", anggota_id: "ang-1", booking_id: "book-0", kating_id: "kat-1", created_at: "2026-08-01T10:00:00Z" },
-  { id: "prog-2", anggota_id: "ang-1", booking_id: "book-0", kating_id: "kat-2", created_at: "2026-08-01T10:00:00Z" },
-  { id: "prog-3", anggota_id: "ang-2", booking_id: "book-0", kating_id: "kat-1", created_at: "2026-08-01T10:00:00Z" },
-];
+let mockProgressList: ProgressRecord[] = [];
 
 // GETTERS & WRITERS
 

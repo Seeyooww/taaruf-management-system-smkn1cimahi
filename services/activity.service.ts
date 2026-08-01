@@ -5,24 +5,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { ActivityLog, ActivityType } from "@/types/activity";
 
 // In-memory fallback for dev mode only (not production)
-let mockActivityLogs: ActivityLog[] = [
-  {
-    id: "log-1",
-    user_name: "Admin TMS",
-    role: "admin",
-    action: "Login",
-    details: "Admin berhasil masuk ke sistem.",
-    created_at: new Date(Date.now() - 3600000 * 5).toISOString(),
-  },
-  {
-    id: "log-2",
-    user_name: "Kelompok 1",
-    role: "kelompok",
-    action: "Booking Dibuat",
-    details: "Membuat booking sesi Taaruf untuk slot Istirahat 2 (2026-08-03).",
-    created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-  },
-];
+let mockActivityLogs: ActivityLog[] = [];
 
 export async function recordActivityLog(
   userName: string,

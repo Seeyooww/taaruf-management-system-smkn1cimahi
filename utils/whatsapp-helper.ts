@@ -95,7 +95,7 @@ export function generateApprovedBookingWAMessage(params: {
 
   const targetPhoneRaw = targetKating.nomor_whatsapp || "";
   const ketua = ketuaNama || (anggotaList[0]?.nama) || "Ketua Kelompok";
-  const kelas = kelasNama || (booking.kelompok_nama?.match(/\((.*?)\)/)?.[1]) || "X SIJA 1";
+  const kelas = kelasNama || (booking.kelompok_nama?.match(/\((.*?)\)/)?.[1]) || "-";
 
   const slotStr = booking.slot_nama && booking.jam_mulai
     ? `${booking.slot_nama} (${booking.jam_mulai} - ${booking.jam_selesai} WIB)`
@@ -103,9 +103,9 @@ export function generateApprovedBookingWAMessage(params: {
 
   const memberLines = anggotaList.length > 0
     ? anggotaList.map((a, idx) => `${idx + 1}. ${a.nama}`).join("\n")
-    : "1. Corel Ahmad Gustafyan\n2. Bagas Fadhlan Rinawan\n3. Sarah Rantelayuk Parura";
+    : "(Daftar anggota kelompok)";
 
-  const tempatStr = (booking.tempat_taaruf || tempatTaaruf || "Masjid SMKN 1 Cimahi").trim();
+  const tempatStr = (booking.tempat_taaruf || tempatTaaruf || "Lokasi Taaruf").trim();
 
   const bersamaLine = otherKatingStr
     ? `Bersama dengan Akang/Teteh lainnya, yaitu ${otherKatingStr}.\n\n`
