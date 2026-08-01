@@ -1,11 +1,21 @@
 export type Gender = "L" | "P";
 
+/** Info ringkas satu kating yang terlampir pada booking */
+export interface KatingBasic {
+  id: string;
+  nama: string;
+  jenis_kelamin: Gender;
+  nomor_whatsapp: string;
+  contacted?: boolean;
+  contacted_at?: string | null;
+}
+
 /** Compact booking entry used for calendar availability calculations */
 export interface CalendarBookingEntry {
   tanggal: string;
   slot_id: string;
-  kating_laki_id: string;
-  kating_perempuan_id: string;
+  /** Array semua kating_id yang terlibat dalam booking ini */
+  kating_ids: string[];
   status: string;
 }
 
@@ -38,6 +48,15 @@ export interface Kating {
   created_at: string;
 }
 
+/** Tabel relasi booking ↔ kating (many-to-many) */
+export interface BookingKating {
+  id: string;
+  booking_id: string;
+  kating_id: string;
+  contacted: boolean;
+  contacted_at?: string | null;
+}
+
 export type BookingStatus =
   | "Draft"
   | "Menunggu Konfirmasi"
@@ -52,16 +71,11 @@ export interface Booking {
   kelompok_id: string;
   tanggal: string;
   slot_id: string;
-  kating_laki_id: string;
-  kating_perempuan_id: string;
   status: BookingStatus;
   catatan?: string | null;
   jam_pulang?: string | null;
+  tempat_taaruf?: string | null;
   created_at: string;
-  akang_contacted?: boolean;
-  akang_contacted_at?: string | null;
-  teteh_contacted?: boolean;
-  teteh_contacted_at?: string | null;
 }
 
 export interface BookingWithDetails extends Booking {
@@ -69,10 +83,8 @@ export interface BookingWithDetails extends Booking {
   slot_nama?: string;
   jam_mulai?: string;
   jam_selesai?: string;
-  kating_laki_nama?: string;
-  kating_perempuan_nama?: string;
-  kating_laki_wa?: string;
-  kating_perempuan_wa?: string;
+  /** Daftar semua kating yang terlibat dalam booking ini */
+  kating_list: KatingBasic[];
 }
 
 export interface BookingParticipant {

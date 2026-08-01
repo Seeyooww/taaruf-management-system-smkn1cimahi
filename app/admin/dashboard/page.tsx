@@ -178,7 +178,7 @@ export default async function AdminDashboardPage() {
                   </div>
                   <div className="text-xs pt-1 border-t border-emerald-500/10 flex items-center justify-between text-foreground">
                     <span className="font-medium text-[11px] truncate">
-                      👨‍🏫 {item.kating_laki_nama} & 👩‍🏫 {item.kating_perempuan_nama}
+                      👥 {(item.kating_names ?? []).join(" & ") || "Kating"}
                     </span>
                   </div>
                 </div>

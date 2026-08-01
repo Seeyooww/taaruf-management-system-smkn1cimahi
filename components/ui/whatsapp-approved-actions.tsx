@@ -32,7 +32,7 @@ import {
   generateApprovedBookingWAMessage,
   openWhatsAppLink,
 } from "@/utils/whatsapp-helper";
-import type { Anggota, BookingWithDetails } from "@/types/database";
+import type { Anggota, BookingWithDetails, KatingBasic } from "@/types/database";
 
 interface WhatsAppApprovedActionsProps {
   booking: BookingWithDetails;
@@ -40,7 +40,7 @@ interface WhatsAppApprovedActionsProps {
   ketuaNama?: string;
   kelasNama?: string;
   className?: string;
-  onContactedUpdate?: (bookingId: string, gender: "L" | "P", timeStr: string) => void;
+  onContactedUpdate?: (bookingId: string, katingId: string, timeStr: string) => void;
 }
 
 export function WhatsAppApprovedActions({
@@ -52,7 +52,7 @@ export function WhatsAppApprovedActions({
   onContactedUpdate,
 }: WhatsAppApprovedActionsProps) {
   // Dialog States
-  const [activeGender, setActiveGender] = React.useState<"L" | "P">("L");
+  const [activeKating, setActiveKating] = React.useState<KatingBasic | null>(null);
   const [isHoursDialogOpen, setIsHoursDialogOpen] = React.useState(false);
   const [isTempatDialogOpen, setIsTempatDialogOpen] = React.useState(false);
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = React.useState(false);
@@ -61,63 +61,68 @@ export function WhatsAppApprovedActions({
   const [tempatTaaruf, setTempatTaaruf] = React.useState("");
   const [isCopied, setIsCopied] = React.useState(false);
 
-  // Local contacted tracking
-  const [localAkangContacted, setLocalAkangContacted] = React.useState<boolean>(
-    Boolean(booking.akang_contacted)
-  );
-  const [localAkangTime, setLocalAkangTime] = React.useState<string | null>(
-    booking.akang_contacted_at || null
-  );
-
-  const [localTetehContacted, setLocalTetehContacted] = React.useState<boolean>(
-    Boolean(booking.teteh_contacted)
-  );
-  const [localTetehTime, setLocalTetehTime] = React.useState<string | null>(
-    booking.teteh_contacted_at || null
-  );
+  // Local contacted tracking per kating_id
+  const [contactedMap, setContactedMap] = React.useState<Map<string, { contacted: boolean; time: string | null }>>(() => {
+    const map = new Map();
+    (booking.kating_list ?? []).forEach((k) => {
+      map.set(k.id, { contacted: Boolean(k.contacted), time: k.contacted_at || null });
+    });
+    return map;
+  });
 
   // Sync if props update
   React.useEffect(() => {
-    setLocalAkangContacted(Boolean(booking.akang_contacted));
-    setLocalAkangTime(booking.akang_contacted_at || null);
-    setLocalTetehContacted(Boolean(booking.teteh_contacted));
-    setLocalTetehTime(booking.teteh_contacted_at || null);
+    const map = new Map();
+    (booking.kating_list ?? []).forEach((k) => {
+      map.set(k.id, { contacted: Boolean(k.contacted), time: k.contacted_at || null });
+    });
+    setContactedMap(map);
   }, [booking]);
 
-  // REQUIREMENT 1: Only display if booking status is "Disetujui"
+  // Only display if booking status is "Disetujui"
   if (booking.status !== "Disetujui") {
     return null;
   }
 
-  // STEP 1: Click Chat Akang or Chat Teteh
-  const handleInitiateChat = (gender: "L" | "P") => {
-    setActiveGender(gender);
-    const isAkang = gender === "L";
-    const phone = isAkang ? booking.kating_laki_wa : booking.kating_perempuan_wa;
+  const katingList = booking.kating_list ?? [];
 
-    // Requirement 7: Missing Number Validation
-    if (!phone || !phone.trim()) {
+  // STEP 1: Click Chat Kating
+  const handleInitiateChat = (kating: KatingBasic) => {
+    setActiveKating(kating);
+
+    // Missing Number Validation
+    if (!kating.nomor_whatsapp || !kating.nomor_whatsapp.trim()) {
       setIsNoPhoneDialogOpen(true);
       return;
     }
 
-    // Requirement 1: Operational Hours Check (06:00 - 20:00 WIB)
+    // Operational Hours Check (06:00 - 20:00 WIB)
     const isWithinHours = checkIsOperationalHours();
     if (!isWithinHours) {
       setIsHoursDialogOpen(true);
       return;
     }
 
-    // Proceed to Tempat Taaruf input
-    setTempatTaaruf("");
-    setIsTempatDialogOpen(true);
+    // Proceed to Tempat Taaruf input or direct preview if already set
+    if (booking.tempat_taaruf) {
+      setTempatTaaruf(booking.tempat_taaruf);
+      setIsPreviewDialogOpen(true);
+    } else {
+      setTempatTaaruf("");
+      setIsTempatDialogOpen(true);
+    }
   };
 
   // Step 2: From Hours Dialog -> "Tetap Kirim"
   const handleConfirmOutsideHours = () => {
     setIsHoursDialogOpen(false);
-    setTempatTaaruf("");
-    setIsTempatDialogOpen(true);
+    if (booking.tempat_taaruf) {
+      setTempatTaaruf(booking.tempat_taaruf);
+      setIsPreviewDialogOpen(true);
+    } else {
+      setTempatTaaruf("");
+      setIsTempatDialogOpen(true);
+    }
   };
 
   // Step 3: From Tempat Taaruf Dialog -> "Lanjutkan"
@@ -128,9 +133,11 @@ export function WhatsAppApprovedActions({
 
   // Step 4: Final Send -> "Buka WhatsApp"
   const handleFinalOpenWhatsApp = () => {
+    if (!activeKating) return;
+
     const payload = generateApprovedBookingWAMessage({
       booking,
-      targetGender: activeGender,
+      targetKating: activeKating,
       anggotaList,
       ketuaNama,
       kelasNama,
@@ -140,34 +147,37 @@ export function WhatsAppApprovedActions({
     openWhatsAppLink(payload.targetPhone, payload.message);
     setIsPreviewDialogOpen(false);
 
-    // Requirement 2 & 4: Update Delivery Status & Timestamp
+    // Update Delivery Status & Timestamp
     const nowTimeStr =
       new Date().toLocaleTimeString("id-ID", {
         hour: "2-digit",
         minute: "2-digit",
       }) + " WIB";
 
-    if (activeGender === "L") {
-      setLocalAkangContacted(true);
-      setLocalAkangTime(nowTimeStr);
-      if (onContactedUpdate) onContactedUpdate(booking.id, "L", nowTimeStr);
-    } else {
-      setLocalTetehContacted(true);
-      setLocalTetehTime(nowTimeStr);
-      if (onContactedUpdate) onContactedUpdate(booking.id, "P", nowTimeStr);
+    setContactedMap((prev) => {
+      const next = new Map(prev);
+      next.set(activeKating.id, { contacted: true, time: nowTimeStr });
+      return next;
+    });
+
+    if (onContactedUpdate) {
+      onContactedUpdate(booking.id, activeKating.id, nowTimeStr);
     }
 
     // Fire background server action
-    updateBookingContactedAction(booking.id, activeGender);
+    updateBookingContactedAction(booking.id, activeKating.id);
 
     toast.success(`Membuka WhatsApp untuk ${payload.targetName}...`);
   };
 
   // Step 5: Copy Template Action
-  const handleCopyTemplate = () => {
+  const handleCopyTemplate = (kating?: KatingBasic) => {
+    const target = kating || activeKating || katingList[0];
+    if (!target) return;
+
     const payload = generateApprovedBookingWAMessage({
       booking,
-      targetGender: activeGender || "L",
+      targetKating: target,
       anggotaList,
       ketuaNama,
       kelasNama,
@@ -180,84 +190,80 @@ export function WhatsAppApprovedActions({
   };
 
   // Computed preview payload
-  const currentPreviewPayload = generateApprovedBookingWAMessage({
-    booking,
-    targetGender: activeGender,
-    anggotaList,
-    ketuaNama,
-    kelasNama,
-    tempatTaaruf,
-  });
+  const currentPreviewPayload = activeKating
+    ? generateApprovedBookingWAMessage({
+        booking,
+        targetKating: activeKating,
+        anggotaList,
+        ketuaNama,
+        kelasNama,
+        tempatTaaruf,
+      })
+    : null;
 
-  const bothContacted = localAkangContacted && localTetehContacted;
+  const allContacted = katingList.every((k) => contactedMap.get(k.id)?.contacted);
 
   return (
     <div className={`space-y-2 ${className || ""}`}>
-      {/* Requirement 3: Status Komunikasi Indicators */}
+      {/* Status Komunikasi Indicators */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold text-muted-foreground text-[11px]">Status Komunikasi:</span>
 
-        {/* Akang Indicator */}
-        {localAkangContacted ? (
-          <Badge variant="success" className="text-[10px] gap-1 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-            <CheckCircle2 className="size-3 text-emerald-500" />
-            <span>✓ Akang ({localAkangTime || "Sudah Dihubungi"})</span>
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
-            <span>☐ Akang</span>
-          </Badge>
-        )}
+        {katingList.map((k) => {
+          const info = contactedMap.get(k.id);
+          const isContacted = info?.contacted;
+          return isContacted ? (
+            <Badge
+              key={k.id}
+              variant="success"
+              className="text-[10px] gap-1 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+            >
+              <CheckCircle2 className="size-3 text-emerald-500" />
+              <span>✓ {k.nama.split(" ")[0]} ({info?.time || "Sudah Dihubungi"})</span>
+            </Badge>
+          ) : (
+            <Badge key={k.id} variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+              <span>☐ {k.nama.split(" ")[0]}</span>
+            </Badge>
+          );
+        })}
 
-        {/* Teteh Indicator */}
-        {localTetehContacted ? (
-          <Badge variant="success" className="text-[10px] gap-1 bg-emerald-600/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30">
-            <CheckCircle2 className="size-3 text-emerald-500" />
-            <span>✓ Teteh ({localTetehTime || "Sudah Dihubungi"})</span>
-          </Badge>
-        ) : (
-          <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
-            <span>☐ Teteh</span>
-          </Badge>
-        )}
-
-        {bothContacted && (
+        {allContacted && katingList.length > 0 && (
           <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
             (Semua Kating sudah dihubungi)
           </span>
         )}
       </div>
 
-      {/* Requirement 10: Responsive Action Buttons */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        {/* Tombol Chat Akang */}
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => handleInitiateChat("L")}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex-1 sm:flex-initial"
-        >
-          <Send className="mr-1.5 size-3.5" />
-          {localAkangContacted ? "Chat Lagi (Akang)" : "Chat Akang"}
-        </Button>
-
-        {/* Tombol Chat Teteh */}
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => handleInitiateChat("P")}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex-1 sm:flex-initial"
-        >
-          <MessageSquare className="mr-1.5 size-3.5" />
-          {localTetehContacted ? "Chat Lagi (Teteh)" : "Chat Teteh"}
-        </Button>
+      {/* Responsive Action Buttons */}
+      <div className="flex flex-wrap items-stretch sm:items-center gap-2">
+        {katingList.map((k) => {
+          const info = contactedMap.get(k.id);
+          const isContacted = info?.contacted;
+          return (
+            <Button
+              key={k.id}
+              type="button"
+              size="sm"
+              onClick={() => handleInitiateChat(k)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs flex-1 sm:flex-initial"
+            >
+              {k.jenis_kelamin === "L" ? (
+                <Send className="mr-1.5 size-3.5" />
+              ) : (
+                <MessageSquare className="mr-1.5 size-3.5" />
+              )}
+              {isContacted ? `Chat Lagi (${k.nama.split(" ")[0]})` : `Chat ${k.nama.split(" ")[0]}`}
+            </Button>
+          );
+        })}
 
         {/* Tombol Copy Template */}
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={handleCopyTemplate}
+          onClick={() => handleCopyTemplate()}
           className="text-xs font-semibold flex-1 sm:flex-initial border-input hover:bg-muted"
         >
           <Copy className="mr-1.5 size-3.5 text-muted-foreground" />
@@ -354,7 +360,7 @@ export function WhatsAppApprovedActions({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-base font-bold">
-              <Send className="size-5" /> Pratinjau Pesan WhatsApp
+              <Send className="size-5" /> Pratinjau Pesan WhatsApp ({activeKating?.nama})
             </DialogTitle>
             <DialogDescription className="text-xs">
               Pesan berikut akan otomatis diisikan pada aplikasi WhatsApp Anda.
@@ -363,7 +369,7 @@ export function WhatsAppApprovedActions({
 
           <div className="space-y-3 py-2">
             <div className="rounded-xl bg-emerald-950/10 dark:bg-emerald-950/40 border border-emerald-500/30 p-3 text-xs font-sans leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
-              {currentPreviewPayload.message}
+              {currentPreviewPayload?.message}
             </div>
           </div>
 
@@ -381,7 +387,7 @@ export function WhatsAppApprovedActions({
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleCopyTemplate}
+              onClick={() => handleCopyTemplate()}
               className="text-xs"
             >
               {isCopied ? <Check className="mr-1 size-3.5 text-emerald-500" /> : <Copy className="mr-1 size-3.5" />}
@@ -407,7 +413,7 @@ export function WhatsAppApprovedActions({
               <AlertTriangle className="size-5" /> Nomor WhatsApp Belum Tersedia
             </DialogTitle>
             <DialogDescription className="text-xs pt-1 leading-relaxed">
-              Nomor WhatsApp Kating ({activeGender === "L" ? booking.kating_laki_nama || "Akang" : booking.kating_perempuan_nama || "Teteh"}) belum diisi di sistem. Silakan hubungi Admin untuk memperbarui data Kating.
+              Nomor WhatsApp Kating ({activeKating?.nama}) belum diisi di sistem. Silakan hubungi Admin untuk memperbarui data Kating.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

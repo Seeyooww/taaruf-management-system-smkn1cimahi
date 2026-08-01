@@ -133,12 +133,10 @@ export default async function KelompokDashboardPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-foreground pt-1 border-t border-border/50">
-                  <span className="font-semibold">Akang:</span>
-                  <span className="font-medium text-emerald-700 dark:text-emerald-300">{nextBooking.kating_laki_nama}</span>
-                </div>
-                <div className="flex items-center justify-between text-foreground">
-                  <span className="font-semibold">Teteh:</span>
-                  <span className="font-medium text-emerald-700 dark:text-emerald-300">{nextBooking.kating_perempuan_nama}</span>
+                  <span className="font-semibold">Kating Pendamping:</span>
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300">
+                    {(nextBooking.kating_list ?? []).map((k) => k.nama).join(", ") || "-"}
+                  </span>
                 </div>
 
                 {/* Dynamic Countdown */}

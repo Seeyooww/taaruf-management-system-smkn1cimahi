@@ -1,4 +1,4 @@
-import type { Anggota, BookingWithDetails } from "@/types/database";
+import type { Anggota, BookingWithDetails, KatingBasic } from "@/types/database";
 
 export function getWaktuGreeting(): string {
   const hour = new Date().getHours();
@@ -46,32 +46,54 @@ export function formatTanggalIndo(tanggalStr: string): { hari: string; tanggalIn
   }
 }
 
+/**
+ * Generate WhatsApp message strictly according to the format required:
+ *
+ * Assalamu'alaikum warahmatullahi wabarakatuh.
+ * Selamat [pagi/siang/sore]. Mohon maaf mengganggu waktunya Akang/Teteh.
+ *
+ * Izin memperkenalkan diri, saya [isi] dari kelas [isi] Angkatan @52.
+ *
+ * Saya hendak mengajak Akang/Teteh untuk ta'aruf bersama dalam rangka menjalin silaturahmi dan saling mengenal, di hari [isi], tanggal [isi] pada jam [beritahu dengan spesifik] di [tempat taaruf].
+ *
+ * Bersama dengan Akang/Teteh lainnya, yaitu [akang/teteh yg diikutsertakan].
+ *
+ * Dan beberapa rekan saya,
+ * [sebutkan nama rekan]
+ *
+ * Apakah Akang/Teteh berkenan meluangkan waktu untuk ta'aruf bersama kami? Terima kasih atas waktunya.
+ *
+ * Wassalamu'alaikum warahmatullahi wabarakatuh
+ */
 export function generateApprovedBookingWAMessage(params: {
   booking: BookingWithDetails;
-  targetGender: "L" | "P";
+  /** Kating target yang akan dihubungi */
+  targetKating: KatingBasic;
   anggotaList?: Anggota[];
   ketuaNama?: string;
   kelasNama?: string;
   tempatTaaruf?: string;
 }): { message: string; targetPhone: string; targetName: string } {
-  const { booking, targetGender, anggotaList = [], ketuaNama, kelasNama, tempatTaaruf } = params;
+  const { booking, targetKating, anggotaList = [], ketuaNama, kelasNama, tempatTaaruf } = params;
 
   const waktu = getWaktuGreeting();
   const { hari, tanggalIndo } = formatTanggalIndo(booking.tanggal);
 
-  const isAkang = targetGender === "L";
-  const sapaan = isAkang
-    ? booking.kating_laki_nama || "Akang"
-    : booking.kating_perempuan_nama || "Teteh";
+  // Target honorific & name
+  const sapaanTarget = targetKating.jenis_kelamin === "L"
+    ? (targetKating.nama.startsWith("Akang") ? targetKating.nama : `Akang ${targetKating.nama}`)
+    : (targetKating.nama.startsWith("Teteh") ? targetKating.nama : `Teteh ${targetKating.nama}`);
 
-  const pasanganKating = isAkang
-    ? booking.kating_perempuan_nama || "Teteh"
-    : booking.kating_laki_nama || "Akang";
+  // Other kating names (excluding target)
+  const otherKatingList = (booking.kating_list ?? [])
+    .filter((k) => k.id !== targetKating.id)
+    .map((k) => (k.jenis_kelamin === "L"
+      ? (k.nama.startsWith("Akang") ? k.nama : `Akang ${k.nama}`)
+      : (k.nama.startsWith("Teteh") ? k.nama : `Teteh ${k.nama}`)));
 
-  const targetPhoneRaw = isAkang
-    ? booking.kating_laki_wa || ""
-    : booking.kating_perempuan_wa || "";
+  const otherKatingStr = otherKatingList.length > 0 ? otherKatingList.join(", ") : "";
 
+  const targetPhoneRaw = targetKating.nomor_whatsapp || "";
   const ketua = ketuaNama || (anggotaList[0]?.nama) || "Ketua Kelompok";
   const kelas = kelasNama || (booking.kelompok_nama?.match(/\((.*?)\)/)?.[1]) || "X SIJA 1";
 
@@ -83,38 +105,25 @@ export function generateApprovedBookingWAMessage(params: {
     ? anggotaList.map((a, idx) => `${idx + 1}. ${a.nama}`).join("\n")
     : "1. Corel Ahmad Gustafyan\n2. Bagas Fadhlan Rinawan\n3. Sarah Rantelayuk Parura";
 
-  const tempatStr = tempatTaaruf && tempatTaaruf.trim() !== ""
-    ? `di ${tempatTaaruf.trim()}.`
-    : "di (tempat taaruf).";
+  const tempatStr = (booking.tempat_taaruf || tempatTaaruf || "Masjid SMKN 1 Cimahi").trim();
+
+  const bersamaLine = otherKatingStr
+    ? `Bersama dengan Akang/Teteh lainnya, yaitu ${otherKatingStr}.\n\n`
+    : "";
 
   const message = `Assalamu'alaikum warahmatullahi wabarakatuh.
+Selamat ${waktu}. Mohon maaf mengganggu waktunya ${sapaanTarget}.
 
-Selamat ${waktu}.
-Mohon maaf mengganggu waktunya ${sapaan}.
+Izin memperkenalkan diri, saya ${ketua} dari kelas ${kelas} Angkatan @52.
 
-Izin memperkenalkan diri,
-saya ${ketua}
-dari kelas ${kelas}
-dari RPL Angkatan @52.
+Saya hendak mengajak ${sapaanTarget} untuk ta'aruf bersama dalam rangka menjalin silaturahmi dan saling mengenal, di hari ${hari}, tanggal ${tanggalIndo} pada jam ${slotStr} di ${tempatStr}.
 
-Saya hendak mengajak ${sapaan} untuk ta'aruf bersama dalam rangka menjalin silaturahmi dan saling mengenal,
-
-di hari ${hari},
-tanggal ${tanggalIndo},
-pada jam ${slotStr}
-${tempatStr}
-
-Bersama dengan ${pasanganKating}.
-
-Dan beberapa rekan saya lainnya,
-
+${bersamaLine}Dan beberapa rekan saya,
 ${memberLines}
 
-Apakah ${sapaan} berkenan meluangkan waktu untuk ta'aruf bersama kami?
+Apakah ${sapaanTarget} berkenan meluangkan waktu untuk ta'aruf bersama kami? Terima kasih atas waktunya.
 
-Terima kasih atas waktunya.
-
-Wassalamu'alaikum warahmatullahi wabarakatuh.`;
+Wassalamu'alaikum warahmatullahi wabarakatuh`;
 
   // Clean phone for WhatsApp URL
   let cleanPhone = targetPhoneRaw.replace(/\D/g, "");
@@ -125,7 +134,7 @@ Wassalamu'alaikum warahmatullahi wabarakatuh.`;
   return {
     message,
     targetPhone: cleanPhone,
-    targetName: sapaan,
+    targetName: sapaanTarget,
   };
 }
 

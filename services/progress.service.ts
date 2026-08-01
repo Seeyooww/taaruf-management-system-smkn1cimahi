@@ -13,13 +13,11 @@ import type { AnggotaProgressSummary, MetKatingDetail, SubstituteEntry } from "@
 /**
  * Fetches progress summaries for all anggota (or filtered by kelompokId).
  *
- * FIX BUG-02: Replaced N+1 per-anggota query loop with a batch approach:
+ * Batch approach (no N+1):
  * 1. Fetch all anggota (with kelompok join) in one query.
  * 2. Fetch ALL progress records for those anggota in one query.
  * 3. Fetch ALL substitution records in two bulk queries.
  * 4. Assemble summaries in-memory.
- *
- * For 114 anggota: was 342 queries → now 4 queries total.
  */
 export async function fetchAnggotaProgressSummaries(
   kelompokId?: string
@@ -88,7 +86,6 @@ export async function fetchAnggotaProgressSummaries(
     });
 
     (allWasReplaced ?? []).forEach((r: any) => {
-      // replaces_anggota_id is the original member who was replaced
       if (r.replaces_anggota_id) {
         wasReplacedByAnggota.get(r.replaces_anggota_id)?.push(r);
       }
@@ -164,10 +161,7 @@ export async function fetchAnggotaProgressSummaries(
 /**
  * Saves attendance + substitution data for a completed booking session.
  *
- * FIX BUG-04: Added idempotency guard — if booking_participants already exist
- * for this bookingId, returns an error instead of inserting duplicates.
- *
- * FIX BUG-02: Uses batch inserts instead of per-row loops.
+ * Uses batch inserts. Kating IDs are now fetched from booking_kating table.
  */
 export async function saveBookingProgress(
   bookingId: string,
@@ -193,16 +187,17 @@ export async function saveBookingProgress(
       };
     }
 
-    // ── Fetch booking details ─────────────────────────────────────────────────
-    const { data: booking } = await supabase
-      .from("booking")
-      .select("kating_laki_id, kating_perempuan_id")
-      .eq("id", bookingId)
-      .single();
+    // ── Fetch kating IDs from booking_kating (not from booking directly) ──────
+    const { data: bkRows } = await supabase
+      .from("booking_kating")
+      .select("kating_id")
+      .eq("booking_id", bookingId);
 
-    if (!booking) {
-      return { success: false, message: "Booking tidak ditemukan." };
+    if (!bkRows || bkRows.length === 0) {
+      return { success: false, message: "Booking tidak ditemukan atau tidak memiliki kating." };
     }
+
+    const katingIds = bkRows.map((r: any) => r.kating_id).filter(Boolean);
 
     // ── Mark booking as Selesai ───────────────────────────────────────────────
     const { error: statusError } = await supabase
@@ -245,7 +240,6 @@ export async function saveBookingProgress(
         .insert(participantRows);
 
       if (participantError) {
-        // Unique constraint violation: already confirmed
         if (participantError.code === "23505") {
           return { success: false, message: "Progress untuk sesi ini sudah pernah dikonfirmasi." };
         }
@@ -253,15 +247,13 @@ export async function saveBookingProgress(
       }
     }
 
-    // ── Batch insert progress records (skip duplicates via upsert) ────────────
-    const katingIds = [booking.kating_laki_id, booking.kating_perempuan_id].filter(Boolean);
+    // ── Batch insert progress records (all participant × all kating) ──────────
     const participantIdsForProgress = [
       ...presentOriginalIds,
       ...substitutes.map((s) => s.substituteId),
     ];
 
     if (participantIdsForProgress.length > 0 && katingIds.length > 0) {
-      // Build progress rows (all combinations of participant × kating)
       const progressRows: { anggota_id: string; booking_id: string; kating_id: string }[] = [];
       for (const anggotaId of participantIdsForProgress) {
         for (const katingId of katingIds) {
@@ -269,7 +261,6 @@ export async function saveBookingProgress(
         }
       }
 
-      // Use upsert with onConflict to skip duplicates (unique constraint must exist)
       const adminClient = createSupabaseAdminClient();
       const { error: progressError } = await adminClient
         .from("progress")
@@ -277,7 +268,6 @@ export async function saveBookingProgress(
 
       if (progressError) {
         console.error("[saveBookingProgress] progress upsert error:", progressError.message);
-        // Don't fail the whole operation if progress upsert fails — participants already saved
       }
     }
 

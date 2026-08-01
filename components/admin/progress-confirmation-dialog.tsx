@@ -192,7 +192,7 @@ export function ProgressConfirmationDialog({
             <div className="text-muted-foreground flex justify-between">
               <span>Slot: {booking.slot_nama}</span>
               <span>
-                Akang: {booking.kating_laki_nama} &bull; Teteh: {booking.kating_perempuan_nama}
+                Kating: {(booking.kating_list ?? []).map((k) => k.nama).join(" & ") || "-"}
               </span>
             </div>
           </div>

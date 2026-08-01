@@ -102,8 +102,8 @@ export interface LiveActiveSessionItem {
   booking_id: string;
   kelompok_nama: string;
   slot_nama: string;
-  kating_laki_nama: string;
-  kating_perempuan_nama: string;
+  /** Daftar nama semua kating yang terlibat */
+  kating_names: string[];
   status: BookingStatus;
   jam: string;
 }
@@ -392,10 +392,10 @@ export async function fetchLaporanKating(filters?: {
 
       if (!katingData) return [];
 
-      // Fetch all completed bookings with kating info
+      // Fetch bookings with booking_kating relation (no kating_laki_id/kating_perempuan_id)
       let bookingQuery = adminClient
         .from("booking")
-        .select("id, tanggal, status, kelompok_id, slot_id, kating_laki_id, kating_perempuan_id, kelompok:kelompok_id(nomor_kelompok, kelas), slot:slot_id(nama_slot)");
+        .select("id, tanggal, status, kelompok_id, slot_id, kelompok:kelompok_id(nomor_kelompok, kelas), slot:slot_id(nama_slot)");
 
       if (filters?.tanggalMulai) bookingQuery = bookingQuery.gte("tanggal", filters.tanggalMulai);
       if (filters?.tanggalSelesai) bookingQuery = bookingQuery.lte("tanggal", filters.tanggalSelesai);
@@ -404,15 +404,33 @@ export async function fetchLaporanKating(filters?: {
 
       const { data: bookingData } = await bookingQuery;
 
+      // Fetch booking_kating to map which kating appear in which bookings
+      const { data: bkData } = await adminClient
+        .from("booking_kating")
+        .select("booking_id, kating_id");
+
       // Fetch progress to count jumlah_ditaarufi per kating
       const { data: progressData } = await adminClient
         .from("progress")
         .select("kating_id, anggota_id");
 
+      // Build map: kating_id -> [booking_id]
+      const katingBookingsMap = new Map<string, string[]>();
+      (bkData ?? []).forEach((r: any) => {
+        const arr = katingBookingsMap.get(r.kating_id) ?? [];
+        arr.push(r.booking_id);
+        katingBookingsMap.set(r.kating_id, arr);
+      });
+
+      // Build map: booking_id -> booking
+      const bookingById = new Map<string, any>();
+      (bookingData ?? []).forEach((b: any) => bookingById.set(b.id, b));
+
       let result: LaporanKatingItem[] = katingData.map((kat: any) => {
-        const myBookings = (bookingData ?? []).filter((b: any) =>
-          b.kating_laki_id === kat.id || b.kating_perempuan_id === kat.id
-        );
+        const myBookingIds = katingBookingsMap.get(kat.id) ?? [];
+        const myBookings = myBookingIds
+          .map((bid) => bookingById.get(bid))
+          .filter(Boolean);
 
         const uniqueKelompokSet = new Set<string>();
         myBookings.forEach((b: any) => {
@@ -466,7 +484,9 @@ export async function fetchLaporanKating(filters?: {
   const summaries = getMockAnggotaProgressSummaries();
 
   let result: LaporanKatingItem[] = katingList.map((kat) => {
-    let myBookings = bookingList.filter((b) => b.kating_laki_id === kat.id || b.kating_perempuan_id === kat.id);
+    let myBookings = bookingList.filter((b) =>
+      b.kating_list?.some((k) => k.id === kat.id)
+    );
     if (filters?.tanggalMulai) myBookings = myBookings.filter((b) => b.tanggal >= filters.tanggalMulai!);
     if (filters?.tanggalSelesai) myBookings = myBookings.filter((b) => b.tanggal <= filters.tanggalSelesai!);
     if (filters?.kelompokId && filters.kelompokId !== "all") myBookings = myBookings.filter((b) => b.kelompok_id === filters.kelompokId);
@@ -779,8 +799,7 @@ export async function fetchLiveActiveSessions(): Promise<LiveActiveSessionItem[]
           id, status,
           kelompok:kelompok_id(nomor_kelompok, kelas),
           slot:slot_id(nama_slot, jam_mulai, jam_selesai),
-          kating_laki:kating_laki_id(nama),
-          kating_perempuan:kating_perempuan_id(nama)
+          booking_kating(kating:kating_id(nama))
         `)
         .eq("tanggal", today)
         .in("status", ["Disetujui", "Selesai"])
@@ -790,8 +809,7 @@ export async function fetchLiveActiveSessions(): Promise<LiveActiveSessionItem[]
         booking_id: b.id,
         kelompok_nama: b.kelompok ? `Kelompok ${b.kelompok.nomor_kelompok} (${b.kelompok.kelas})` : "Kelompok",
         slot_nama: b.slot?.nama_slot ?? "Istirahat",
-        kating_laki_nama: b.kating_laki?.nama ?? "Akang",
-        kating_perempuan_nama: b.kating_perempuan?.nama ?? "Teteh",
+        kating_names: (b.booking_kating ?? []).map((bk: any) => bk.kating?.nama ?? "Kating"),
         status: b.status as BookingStatus,
         jam: `${b.slot?.jam_mulai ?? "00:00"} - ${b.slot?.jam_selesai ?? "00:00"} WIB`,
       }));
@@ -808,8 +826,7 @@ export async function fetchLiveActiveSessions(): Promise<LiveActiveSessionItem[]
       booking_id: b.id,
       kelompok_nama: b.kelompok_nama || "Kelompok",
       slot_nama: b.slot_nama || "Istirahat",
-      kating_laki_nama: b.kating_laki_nama || "Akang",
-      kating_perempuan_nama: b.kating_perempuan_nama || "Teteh",
+      kating_names: (b.kating_list ?? []).map((k) => k.nama),
       status: b.status,
       jam: `${b.jam_mulai} - ${b.jam_selesai} WIB`,
     }));

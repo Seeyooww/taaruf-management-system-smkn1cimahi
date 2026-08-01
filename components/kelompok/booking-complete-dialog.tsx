@@ -112,7 +112,7 @@ export function BookingCompleteDialog({
           <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs space-y-0.5 mb-1">
             <p className="font-semibold">{booking.tanggal} · {booking.slot_nama}</p>
             <p className="text-muted-foreground">
-              Akang: {booking.kating_laki_nama} · Teteh: {booking.kating_perempuan_nama}
+              Kating: {(booking.kating_list ?? []).map((k) => k.nama).join(", ") || "-"}
             </p>
           </div>
         )}

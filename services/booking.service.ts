@@ -12,11 +12,15 @@ import {
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchEventSettings } from "@/services/settings.service";
 import { fetchSlotList } from "@/services/slot.service";
-import type { BookingStatus, CalendarBookingEntry, Gender, Kating } from "@/types/database";
+import type { BookingStatus, CalendarBookingEntry, KatingBasic, Kating } from "@/types/database";
 
 // CalendarBookingEntry is defined in @/types/database and re-exported for convenience
 export type { CalendarBookingEntry } from "@/types/database";
 
+/**
+ * Fetch booking list (optionally filtered by kelompok).
+ * Uses a single JOIN query via booking_kating to avoid N+1.
+ */
 export async function fetchBookingList(
   kelompokId?: string
 ): Promise<BookingWithDetails[]> {
@@ -26,11 +30,13 @@ export async function fetchBookingList(
       .from("booking")
       .select(
         `
-        *,
+        id, kelompok_id, tanggal, slot_id, status, catatan, jam_pulang, tempat_taaruf, created_at,
         kelompok:kelompok_id(nomor_kelompok, kelas),
         slot:slot_id(nama_slot, jam_mulai, jam_selesai),
-        kating_laki:kating_laki_id(nama, nomor_whatsapp),
-        kating_perempuan:kating_perempuan_id(nama, nomor_whatsapp)
+        booking_kating(
+          kating_id, contacted, contacted_at,
+          kating:kating_id(id, nama, jenis_kelamin, nomor_whatsapp)
+        )
       `
       )
       .order("created_at", { ascending: false });
@@ -51,26 +57,25 @@ export async function fetchBookingList(
         kelompok_id: b.kelompok_id,
         tanggal: b.tanggal,
         slot_id: b.slot_id,
-        kating_laki_id: b.kating_laki_id,
-        kating_perempuan_id: b.kating_perempuan_id,
         status: b.status as BookingStatus,
         catatan: b.catatan,
         jam_pulang: b.jam_pulang ?? null,
+        tempat_taaruf: b.tempat_taaruf ?? null,
         created_at: b.created_at,
-        akang_contacted: b.akang_contacted,
-        akang_contacted_at: b.akang_contacted_at,
-        teteh_contacted: b.teteh_contacted,
-        teteh_contacted_at: b.teteh_contacted_at,
         kelompok_nama: b.kelompok
           ? `Kelompok ${b.kelompok.nomor_kelompok} (${b.kelompok.kelas})`
           : "Kelompok",
         slot_nama: b.slot ? b.slot.nama_slot : "Slot",
         jam_mulai: b.slot ? b.slot.jam_mulai : "00:00",
         jam_selesai: b.slot ? b.slot.jam_selesai : "00:00",
-        kating_laki_nama: b.kating_laki ? b.kating_laki.nama : "Akang",
-        kating_perempuan_nama: b.kating_perempuan ? b.kating_perempuan.nama : "Teteh",
-        kating_laki_wa: b.kating_laki ? b.kating_laki.nomor_whatsapp : "",
-        kating_perempuan_wa: b.kating_perempuan ? b.kating_perempuan.nomor_whatsapp : "",
+        kating_list: (b.booking_kating ?? []).map((bk: any) => ({
+          id: bk.kating?.id ?? bk.kating_id,
+          nama: bk.kating?.nama ?? "Kating",
+          jenis_kelamin: bk.kating?.jenis_kelamin ?? "L",
+          nomor_whatsapp: bk.kating?.nomor_whatsapp ?? "",
+          contacted: bk.contacted ?? false,
+          contacted_at: bk.contacted_at ?? null,
+        })) as KatingBasic[],
       }));
     }
   }
@@ -78,48 +83,52 @@ export async function fetchBookingList(
   return getMockBookingList(kelompokId);
 }
 
+/**
+ * Fetch all available kating for a given date + slot.
+ * Gender is no longer filtered here — callers can filter if needed.
+ */
 export async function fetchAvailableKating(
   tanggal: string,
-  slot_id: string,
-  gender: Gender
+  slot_id: string
 ): Promise<Kating[]> {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
     const { data: katingList } = await supabase
       .from("kating")
       .select("*")
-      .eq("jenis_kelamin", gender)
       .eq("aktif", true);
 
     if (!katingList) return [];
 
-    const { data: busyBookings } = await supabase
-      .from("booking")
-      .select("kating_laki_id, kating_perempuan_id")
-      .eq("tanggal", tanggal)
-      .eq("slot_id", slot_id)
-      .not("status", "in", '("Ditolak","Dibatalkan")');
+    // Find kating already booked on this date+slot (via booking_kating)
+    const { data: busyRows } = await supabase
+      .from("booking_kating")
+      .select("kating_id, booking:booking_id(tanggal, slot_id, status)")
+      .filter("booking.tanggal", "eq", tanggal)
+      .filter("booking.slot_id", "eq", slot_id)
+      .not("booking.status", "in", '("Ditolak","Dibatalkan")');
 
-    const busyIds = new Set<string>();
-    (busyBookings || []).forEach((b: any) => {
-      if (b.kating_laki_id) busyIds.add(b.kating_laki_id);
-      if (b.kating_perempuan_id) busyIds.add(b.kating_perempuan_id);
-    });
+    const busyIds = new Set<string>(
+      (busyRows ?? []).map((r: any) => r.kating_id).filter(Boolean)
+    );
 
     return katingList.filter((k: any) => !busyIds.has(k.id)) as Kating[];
   }
 
-  return getAvailableKatingList(tanggal, slot_id, gender);
+  return getAvailableKatingList(tanggal, slot_id);
 }
 
+/**
+ * Create a new booking with a list of kating (many-to-many).
+ */
 export async function createBooking(data: {
   kelompok_id: string;
   tanggal: string;
   slot_id: string;
-  kating_laki_id: string;
-  kating_perempuan_id: string;
+  kating_ids: string[];
   catatan?: string;
   jam_pulang?: string | null;
+  tempat_taaruf?: string | null;
 }) {
   const settings = await fetchEventSettings();
   const bookingDate = new Date(data.tanggal);
@@ -142,46 +151,117 @@ export async function createBooking(data: {
     };
   }
 
-  const availableAkang = await fetchAvailableKating(data.tanggal, data.slot_id, "L");
-  const availableTeteh = await fetchAvailableKating(data.tanggal, data.slot_id, "P");
+  if (!data.kating_ids || data.kating_ids.length === 0) {
+    return {
+      success: false,
+      message: "Pilih minimal satu kating pendamping.",
+    };
+  }
 
-  const isAkangFree = availableAkang.some((k) => k.id === data.kating_laki_id);
-  const isTetehFree = availableTeteh.some((k) => k.id === data.kating_perempuan_id);
+  // Validate availability for every selected kating
+  const available = await fetchAvailableKating(data.tanggal, data.slot_id);
+  const availableIds = new Set(available.map((k) => k.id));
+  const conflictIds = data.kating_ids.filter((id) => !availableIds.has(id));
 
-  if (!isAkangFree || !isTetehFree) {
+  if (conflictIds.length > 0) {
     return {
       success: false,
       message:
-        "Akang atau Teteh yang Anda pilih baru saja dibooking oleh kelompok lain untuk slot waktu tersebut. Silakan pilih kating lain.",
+        "Satu atau lebih kating yang Anda pilih sudah dibooking oleh kelompok lain untuk slot waktu tersebut. Silakan pilih kating lain.",
     };
   }
 
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
+
+    // Insert booking row
     const { data: created, error } = await supabase
       .from("booking")
       .insert({
         kelompok_id: data.kelompok_id,
         tanggal: data.tanggal,
         slot_id: data.slot_id,
-        kating_laki_id: data.kating_laki_id,
-        kating_perempuan_id: data.kating_perempuan_id,
         status: "Menunggu Konfirmasi",
         catatan: data.catatan || null,
         jam_pulang: data.jam_pulang || null,
+        tempat_taaruf: data.tempat_taaruf || null,
       })
       .select()
       .single();
 
-    if (error) {
-      console.error("[createBooking] Supabase insert error:", error.message, error.code);
+    if (error || !created) {
+      console.error("[createBooking] Supabase insert error:", error?.message, error?.code);
       return {
         success: false,
-        message: `Gagal membuat booking: ${error.message}`,
+        message: `Gagal membuat booking: ${error?.message ?? "Unknown error"}`,
       };
     }
 
-    return { success: true, data: created };
+    // Batch insert booking_kating rows
+    const bookingKatingRows = data.kating_ids.map((kating_id) => ({
+      booking_id: created.id,
+      kating_id,
+    }));
+
+    const { error: bkError } = await supabase
+      .from("booking_kating")
+      .insert(bookingKatingRows);
+
+    if (bkError) {
+      console.error("[createBooking] booking_kating insert error:", bkError.message);
+      // Rollback booking
+      await supabase.from("booking").delete().eq("id", created.id);
+      return {
+        success: false,
+        message: `Gagal menyimpan relasi kating: ${bkError.message}`,
+      };
+    }
+
+    // Return full booking with kating_list
+    const { data: fullBooking } = await supabase
+      .from("booking")
+      .select(
+        `id, kelompok_id, tanggal, slot_id, status, catatan, jam_pulang, tempat_taaruf, created_at,
+        kelompok:kelompok_id(nomor_kelompok, kelas),
+        slot:slot_id(nama_slot, jam_mulai, jam_selesai),
+        booking_kating(kating_id, contacted, contacted_at, kating:kating_id(id, nama, jenis_kelamin, nomor_whatsapp))`
+      )
+      .eq("id", created.id)
+      .single();
+
+    if (fullBooking) {
+      const b = fullBooking as any;
+      return {
+        success: true,
+        data: {
+          id: b.id,
+          kelompok_id: b.kelompok_id,
+          tanggal: b.tanggal,
+          slot_id: b.slot_id,
+          status: b.status as BookingStatus,
+          catatan: b.catatan,
+          jam_pulang: b.jam_pulang ?? null,
+          tempat_taaruf: b.tempat_taaruf ?? null,
+          created_at: b.created_at,
+          kelompok_nama: b.kelompok
+            ? `Kelompok ${b.kelompok.nomor_kelompok} (${b.kelompok.kelas})`
+            : "Kelompok",
+          slot_nama: b.slot?.nama_slot ?? "Slot",
+          jam_mulai: b.slot?.jam_mulai ?? "00:00",
+          jam_selesai: b.slot?.jam_selesai ?? "00:00",
+          kating_list: (b.booking_kating ?? []).map((bk: any) => ({
+            id: bk.kating?.id ?? bk.kating_id,
+            nama: bk.kating?.nama ?? "Kating",
+            jenis_kelamin: bk.kating?.jenis_kelamin ?? "L",
+            nomor_whatsapp: bk.kating?.nomor_whatsapp ?? "",
+            contacted: bk.contacted ?? false,
+            contacted_at: bk.contacted_at ?? null,
+          })) as KatingBasic[],
+        } as BookingWithDetails,
+      };
+    }
+
+    return { success: true, data: { ...created, kating_list: [] } as unknown as BookingWithDetails };
   }
 
   // Development-only fallback (hanya aktif jika Supabase tidak dikonfigurasi)
@@ -213,7 +293,10 @@ export async function updateBookingStatus(id: string, status: BookingStatus) {
   return { success: true, message: `Status booking diperbarui menjadi "${status}".` };
 }
 
-export async function updateBookingContactedStatus(id: string, gender: Gender) {
+/**
+ * Mark a specific kating as contacted for a booking.
+ */
+export async function updateBookingContactedStatus(id: string, kating_id: string) {
   const timeStr = new Date().toLocaleTimeString("id-ID", {
     hour: "2-digit",
     minute: "2-digit",
@@ -221,11 +304,12 @@ export async function updateBookingContactedStatus(id: string, gender: Gender) {
 
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
-    const payload = gender === "L"
-      ? { akang_contacted: true, akang_contacted_at: timeStr }
-      : { teteh_contacted: true, teteh_contacted_at: timeStr };
 
-    const { error } = await supabase.from("booking").update(payload).eq("id", id);
+    const { error } = await supabase
+      .from("booking_kating")
+      .update({ contacted: true, contacted_at: timeStr })
+      .eq("booking_id", id)
+      .eq("kating_id", kating_id);
 
     if (error) {
       console.error("[updateBookingContactedStatus] Supabase update error:", error.message, error.code);
@@ -236,48 +320,71 @@ export async function updateBookingContactedStatus(id: string, gender: Gender) {
   }
 
   // Development-only fallback
-  const updated = updateMockBookingContactedStatus(id, gender);
-  return { success: true, data: updated };
+  updateMockBookingContactedStatus(id, kating_id);
+  return { success: true };
 }
 
 /**
  * Compact booking data for calendar availability calculation.
- * Returns ALL bookings (all kelompok) with only the fields needed.
+ * Returns ALL bookings (all kelompok) with kating_ids array.
  */
 export async function fetchAllBookingsForCalendar(): Promise<CalendarBookingEntry[]> {
   if (isSupabaseConfigured()) {
     const adminClient = createSupabaseAdminClient();
-    const { data, error } = await adminClient
-      .from("booking")
-      .select("tanggal, slot_id, kating_laki_id, kating_perempuan_id, status");
 
-    if (error) {
-      console.error("[fetchAllBookingsForCalendar] error:", error.message);
+    // Fetch booking basic data + their kating via booking_kating
+    const { data: bookings, error: bookingError } = await adminClient
+      .from("booking")
+      .select("id, tanggal, slot_id, status");
+
+    if (bookingError) {
+      console.error("[fetchAllBookingsForCalendar] booking error:", bookingError.message);
       return [];
     }
-    return (data ?? []) as CalendarBookingEntry[];
+
+    if (!bookings || bookings.length === 0) return [];
+
+    // Batch-fetch all booking_kating for these booking ids (single query)
+    const bookingIds = bookings.map((b: any) => b.id);
+    const { data: bkRows } = await adminClient
+      .from("booking_kating")
+      .select("booking_id, kating_id")
+      .in("booking_id", bookingIds);
+
+    // Build kating_ids map per booking
+    const katingMap = new Map<string, string[]>();
+    (bkRows ?? []).forEach((r: any) => {
+      const arr = katingMap.get(r.booking_id) ?? [];
+      arr.push(r.kating_id);
+      katingMap.set(r.booking_id, arr);
+    });
+
+    return bookings.map((b: any) => ({
+      tanggal: b.tanggal,
+      slot_id: b.slot_id,
+      status: b.status,
+      kating_ids: katingMap.get(b.id) ?? [],
+    })) as CalendarBookingEntry[];
   }
   return [];
 }
 
 /**
- * Returns total count of active kating per gender.
+ * Returns total count of active kating (total, no gender split).
  */
-export async function fetchKatingCounts(): Promise<{ totalL: number; totalP: number }> {
+export async function fetchKatingCounts(): Promise<{ total: number }> {
   if (isSupabaseConfigured()) {
     const adminClient = createSupabaseAdminClient();
-    const { data, error } = await adminClient
+    const { count, error } = await adminClient
       .from("kating")
-      .select("id, jenis_kelamin")
+      .select("id", { count: "exact", head: true })
       .eq("aktif", true);
 
     if (error) {
       console.error("[fetchKatingCounts] error:", error.message);
-      return { totalL: 0, totalP: 0 };
+      return { total: 0 };
     }
-    const totalL = (data ?? []).filter((k: any) => k.jenis_kelamin === "L").length;
-    const totalP = (data ?? []).filter((k: any) => k.jenis_kelamin === "P").length;
-    return { totalL, totalP };
+    return { total: count ?? 0 };
   }
-  return { totalL: 0, totalP: 0 };
+  return { total: 0 };
 }

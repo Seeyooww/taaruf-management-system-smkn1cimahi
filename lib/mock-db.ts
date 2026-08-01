@@ -81,8 +81,6 @@ let mockBookingList: BookingWithDetails[] = [
     kelompok_id: "kel-1",
     tanggal: "2026-08-03",
     slot_id: "slot-2",
-    kating_laki_id: "kat-1",
-    kating_perempuan_id: "kat-2",
     status: "Menunggu Konfirmasi",
     catatan: "Pengajuan awal",
     created_at: "2026-07-30T11:00:00Z",
@@ -90,10 +88,10 @@ let mockBookingList: BookingWithDetails[] = [
     slot_nama: "Istirahat 2",
     jam_mulai: "12:00",
     jam_selesai: "12:45",
-    kating_laki_nama: "Akang Fikri Haikal",
-    kating_perempuan_nama: "Teteh Anisa Fitri",
-    kating_laki_wa: "081234567890",
-    kating_perempuan_wa: "081987654321",
+    kating_list: [
+      { id: "kat-1", nama: "Akang Fikri Haikal", jenis_kelamin: "L", nomor_whatsapp: "081234567890", contacted: false, contacted_at: null },
+      { id: "kat-2", nama: "Teteh Anisa Fitri", jenis_kelamin: "P", nomor_whatsapp: "081987654321", contacted: false, contacted_at: null },
+    ],
   },
 ];
 
@@ -368,15 +366,14 @@ export function getMockBookingList(kelompokId?: string): BookingWithDetails[] {
   return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
-export function getAvailableKatingList(tanggal: string, slot_id: string, gender: Gender): Kating[] {
-  const activeKating = mockKatingList.filter((k) => k.aktif && k.jenis_kelamin === gender);
+export function getAvailableKatingList(tanggal: string, slot_id: string): Kating[] {
+  const activeKating = mockKatingList.filter((k) => k.aktif);
   const busyBooking = mockBookingList.filter(
     (b) => b.tanggal === tanggal && b.slot_id === slot_id && b.status !== "Ditolak" && b.status !== "Dibatalkan"
   );
   const busyKatingIds = new Set<string>();
   busyBooking.forEach((b) => {
-    if (b.kating_laki_id) busyKatingIds.add(b.kating_laki_id);
-    if (b.kating_perempuan_id) busyKatingIds.add(b.kating_perempuan_id);
+    (b.kating_list ?? []).forEach((k) => busyKatingIds.add(k.id));
   });
   return activeKating.filter((k) => !busyKatingIds.has(k.id));
 }
@@ -388,72 +385,69 @@ export function createMockBooking(data: {
   kelompok_id: string;
   tanggal: string;
   slot_id: string;
-  kating_laki_id: string;
-  kating_perempuan_id: string;
+  kating_ids: string[];
   catatan?: string;
   jam_pulang?: string | null;
+  tempat_taaruf?: string | null;
 }) {
   // 1. Check Event Lock
   if (isEventLocked()) {
     throw new Error("Acara sedang dikunci oleh Admin. Booking baru tidak dapat dibuat.");
   }
 
-  // 2. Check Pair Completeness
-  if (!data.kating_laki_id || !data.kating_perempuan_id) {
-    throw new Error("Booking wajib memilih pasangan kating lengkap (Akang & Teteh).");
+  // 2. Check at least one kating selected
+  if (!data.kating_ids || data.kating_ids.length === 0) {
+    throw new Error("Booking wajib memilih minimal satu kating pendamping.");
   }
 
-  // 3. Gender Pair Validation
-  const kl = mockKatingList.find((kat) => kat.id === data.kating_laki_id);
-  const kp = mockKatingList.find((kat) => kat.id === data.kating_perempuan_id);
-
-  if (!kl || kl.jenis_kelamin !== "L") {
-    throw new Error("Akang pendamping harus berjenis kelamin Laki-laki.");
-  }
-
-  if (!kp || kp.jenis_kelamin !== "P") {
-    throw new Error("Teteh pendamping harus berjenis kelamin Perempuan.");
-  }
-
-  // 4. Slot & Date Conflict Validation
-  const existingConflict = mockBookingList.find(
+  // 3. Validate all selected kating exist and are available
+  const busyBookings = mockBookingList.filter(
     (b) =>
       b.tanggal === data.tanggal &&
       b.slot_id === data.slot_id &&
       b.status !== "Ditolak" &&
-      b.status !== "Dibatalkan" &&
-      (b.kating_laki_id === data.kating_laki_id ||
-        b.kating_perempuan_id === data.kating_perempuan_id ||
-        b.kating_laki_id === data.kating_perempuan_id ||
-        b.kating_perempuan_id === data.kating_laki_id)
+      b.status !== "Dibatalkan"
   );
+  const busyKatingIds = new Set<string>();
+  busyBookings.forEach((b) => {
+    (b.kating_list ?? []).forEach((k) => busyKatingIds.add(k.id));
+  });
 
-  if (existingConflict) {
-    throw new Error(`Slot ${data.tanggal} sudah terpakai oleh kating yang dipilih pada kelompok lain.`);
+  const conflictIds = data.kating_ids.filter((id) => busyKatingIds.has(id));
+  if (conflictIds.length > 0) {
+    throw new Error(`Satu atau lebih kating yang dipilih sudah di-booking pada slot ini.`);
   }
 
   const k = mockKelompokList.find((kel) => kel.id === data.kelompok_id || kel.username === data.kelompok_id);
   const s = mockSlotList.find((slot) => slot.id === data.slot_id);
+
+  const kating_list = data.kating_ids.map((kid) => {
+    const kat = mockKatingList.find((k) => k.id === kid);
+    return {
+      id: kid,
+      nama: kat ? kat.nama : "Kating",
+      jenis_kelamin: kat ? kat.jenis_kelamin : ("L" as Gender),
+      nomor_whatsapp: kat ? kat.nomor_whatsapp : "",
+      contacted: false,
+      contacted_at: null,
+    };
+  });
 
   const newBooking: BookingWithDetails = {
     id: `book-${Date.now()}`,
     kelompok_id: k?.id || data.kelompok_id,
     tanggal: data.tanggal,
     slot_id: data.slot_id,
-    kating_laki_id: data.kating_laki_id,
-    kating_perempuan_id: data.kating_perempuan_id,
     status: "Menunggu Konfirmasi",
     catatan: data.catatan || null,
     jam_pulang: data.jam_pulang || null,
+    tempat_taaruf: data.tempat_taaruf || null,
     created_at: new Date().toISOString(),
     kelompok_nama: k ? `Kelompok ${k.nomor_kelompok} (${k.kelas})` : "Kelompok",
     slot_nama: s ? s.nama_slot : "Slot",
     jam_mulai: s ? s.jam_mulai : "00:00",
     jam_selesai: s ? s.jam_selesai : "00:00",
-    kating_laki_nama: kl ? kl.nama : "Akang",
-    kating_perempuan_nama: kp ? kp.nama : "Teteh",
-    kating_laki_wa: kl ? kl.nomor_whatsapp : "",
-    kating_perempuan_wa: kp ? kp.nomor_whatsapp : "",
+    kating_list,
   };
 
   mockBookingList.unshift(newBooking);
@@ -472,7 +466,7 @@ export function updateMockBookingStatus(id: string, status: BookingStatus) {
   return null;
 }
 
-export function updateMockBookingContactedStatus(id: string, gender: "L" | "P") {
+export function updateMockBookingContactedStatus(id: string, kating_id: string) {
   const idx = mockBookingList.findIndex((b) => b.id === id);
   if (idx !== -1) {
     const timeStr = new Date().toLocaleTimeString("id-ID", {
@@ -480,12 +474,10 @@ export function updateMockBookingContactedStatus(id: string, gender: "L" | "P") 
       minute: "2-digit",
     }) + " WIB";
 
-    if (gender === "L") {
-      mockBookingList[idx].akang_contacted = true;
-      mockBookingList[idx].akang_contacted_at = timeStr;
-    } else {
-      mockBookingList[idx].teteh_contacted = true;
-      mockBookingList[idx].teteh_contacted_at = timeStr;
+    const kating = mockBookingList[idx].kating_list?.find((k) => k.id === kating_id);
+    if (kating) {
+      kating.contacted = true;
+      kating.contacted_at = timeStr;
     }
     return mockBookingList[idx];
   }
@@ -512,7 +504,7 @@ export function saveMockBookingProgress(bookingId: string, presentAnggotaIds: st
   }
 
   booking.status = "Selesai";
-  const katingIds = [booking.kating_laki_id, booking.kating_perempuan_id].filter(Boolean);
+  const katingIds = (booking.kating_list ?? []).map((k) => k.id).filter(Boolean);
   let newProgressCount = 0;
 
   presentAnggotaIds.forEach((anggotaId) => {
@@ -743,8 +735,6 @@ export function simulateDayOneEvent() {
       kelompok_id: k.id,
       tanggal: dayOneStr,
       slot_id: slotObj.id,
-      kating_laki_id: akangObj.id,
-      kating_perempuan_id: tetehObj.id,
       status,
       catatan: `Simulasi Sesi Taaruf Hari Ke-1 (Kelompok ${k.nomor_kelompok})`,
       created_at: new Date().toISOString(),
@@ -752,10 +742,10 @@ export function simulateDayOneEvent() {
       slot_nama: slotObj.nama_slot,
       jam_mulai: slotObj.jam_mulai,
       jam_selesai: slotObj.jam_selesai,
-      kating_laki_nama: akangObj.nama,
-      kating_perempuan_nama: tetehObj.nama,
-      kating_laki_wa: akangObj.nomor_whatsapp,
-      kating_perempuan_wa: tetehObj.nomor_whatsapp,
+      kating_list: [
+        { id: akangObj.id, nama: akangObj.nama, jenis_kelamin: "L", nomor_whatsapp: akangObj.nomor_whatsapp, contacted: false, contacted_at: null },
+        { id: tetehObj.id, nama: tetehObj.nama, jenis_kelamin: "P", nomor_whatsapp: tetehObj.nomor_whatsapp, contacted: false, contacted_at: null },
+      ],
     };
 
     newBookings.push(bItem);

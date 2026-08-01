@@ -48,7 +48,7 @@ interface KelompokBookingViewProps {
   kelompokNama: string;
   anggotaList?: Anggota[];
   allCalendarBookings: CalendarBookingEntry[];
-  katingCounts: { totalL: number; totalP: number };
+  katingCounts: { total: number };
 }
 
 export function KelompokBookingView({
@@ -78,11 +78,13 @@ export function KelompokBookingView({
     return bookings.filter((b) => {
       const q = search.toLowerCase().trim();
       if (!q) return true;
+      const katingMatch = (b.kating_list ?? []).some((k) =>
+        k.nama.toLowerCase().includes(q)
+      );
       return (
         b.tanggal.toLowerCase().includes(q) ||
         (b.slot_nama && b.slot_nama.toLowerCase().includes(q)) ||
-        (b.kating_laki_nama && b.kating_laki_nama.toLowerCase().includes(q)) ||
-        (b.kating_perempuan_nama && b.kating_perempuan_nama.toLowerCase().includes(q)) ||
+        katingMatch ||
         b.status.toLowerCase().includes(q)
       );
     });
@@ -99,15 +101,14 @@ export function KelompokBookingView({
     setIsStepperOpen(true);
   };
 
-  const handleContactedUpdate = (bookingId: string, gender: "L" | "P", timeStr: string) => {
+  const handleContactedUpdate = (bookingId: string, katingId: string, timeStr: string) => {
     setBookings((prev) =>
       prev.map((b) => {
         if (b.id === bookingId) {
-          if (gender === "L") {
-            return { ...b, akang_contacted: true, akang_contacted_at: timeStr };
-          } else {
-            return { ...b, teteh_contacted: true, teteh_contacted_at: timeStr };
-          }
+          const kating_list = (b.kating_list ?? []).map((k) =>
+            k.id === katingId ? { ...k, contacted: true, contacted_at: timeStr } : k
+          );
+          return { ...b, kating_list };
         }
         return b;
       })
@@ -299,8 +300,7 @@ export function KelompokBookingView({
                 <TableRow>
                   <TableHead className="text-xs">Tanggal</TableHead>
                   <TableHead className="text-xs">Slot Waktu</TableHead>
-                  <TableHead className="text-xs">Akang (L)</TableHead>
-                  <TableHead className="text-xs">Teteh (P)</TableHead>
+                  <TableHead className="text-xs">Kating Pendamping</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
                   <TableHead className="text-xs text-right">Aksi</TableHead>
                 </TableRow>
@@ -342,8 +342,23 @@ export function KelompokBookingView({
                           {item.jam_mulai} WIB {item.jam_pulang ? `• Pulang: ${item.jam_pulang} WIB` : `- ${item.jam_selesai} WIB`}
                         </div>
                       </TableCell>
-                      <TableCell className="text-xs font-medium">{item.kating_laki_nama}</TableCell>
-                      <TableCell className="text-xs font-medium">{item.kating_perempuan_nama}</TableCell>
+                      <TableCell className="text-xs font-medium">
+                        <div className="flex flex-wrap gap-1">
+                          {(item.kating_list ?? []).map((k) => (
+                            <Badge
+                              key={k.id}
+                              variant="outline"
+                              className={`text-[10px] ${
+                                k.jenis_kelamin === "L"
+                                  ? "border-primary/30 text-primary"
+                                  : "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {k.nama}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
                       <TableCell>{getStatusBadge(item.status)}</TableCell>
                       <TableCell className="text-right p-3">
                         {renderActionCell(item)}

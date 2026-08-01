@@ -17,7 +17,7 @@ import {
   generateApprovedBookingWAMessage,
   openWhatsAppLink,
 } from "@/utils/whatsapp-helper";
-import type { Anggota, BookingWithDetails, WhatsAppTemplate } from "@/types/database";
+import type { Anggota, BookingWithDetails, KatingBasic, WhatsAppTemplate } from "@/types/database";
 
 interface WhatsAppPreviewDialogProps {
   open: boolean;
@@ -33,24 +33,30 @@ export function WhatsAppPreviewDialog({
   booking,
   anggotaList = [],
 }: WhatsAppPreviewDialogProps) {
+  const [selectedKatingIndex, setSelectedKatingIndex] = React.useState(0);
   const [isCopied, setIsCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setSelectedKatingIndex(0);
+    }
+  }, [open]);
 
   if (!booking) return null;
 
-  const akangPayload = generateApprovedBookingWAMessage({
-    booking,
-    targetGender: "L",
-    anggotaList,
-  });
+  const katingList: KatingBasic[] = booking.kating_list ?? [];
+  const currentKating = katingList[selectedKatingIndex] || katingList[0];
 
-  const tetehPayload = generateApprovedBookingWAMessage({
-    booking,
-    targetGender: "P",
-    anggotaList,
-  });
+  const payload = currentKating
+    ? generateApprovedBookingWAMessage({
+        booking,
+        targetKating: currentKating,
+        anggotaList,
+      })
+    : { message: "", targetPhone: "", targetName: "" };
 
   const handleCopyText = () => {
-    navigator.clipboard.writeText(akangPayload.message);
+    navigator.clipboard.writeText(payload.message);
     setIsCopied(true);
     toast.success("✔ Template berhasil disalin.");
     setTimeout(() => setIsCopied(false), 2000);
@@ -64,7 +70,7 @@ export function WhatsAppPreviewDialog({
             <MessageSquare className="size-5" /> Generator WhatsApp Taaruf
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Hubungi Akang & Teteh pendamping secara langsung menggunakan format pesan otomatis.
+            Hubungi kating pendamping secara langsung menggunakan format pesan otomatis.
           </DialogDescription>
         </DialogHeader>
 
@@ -77,17 +83,39 @@ export function WhatsAppPreviewDialog({
             </div>
             <div className="text-muted-foreground flex justify-between">
               <span>Slot: {booking.slot_nama} ({booking.jam_mulai} - {booking.jam_selesai})</span>
+              {booking.tempat_taaruf && <span>Tempat: {booking.tempat_taaruf}</span>}
             </div>
-            <div className="border-t border-border pt-1.5 flex justify-between font-medium">
-              <span>Akang: {booking.kating_laki_nama}</span>
-              <span>Teteh: {booking.kating_perempuan_nama}</span>
+            <div className="border-t border-border pt-1.5 flex flex-wrap gap-2 font-medium">
+              <span className="text-muted-foreground">Kating Pendamping:</span>
+              <span>{katingList.map((k) => k.nama).join(", ") || "-"}</span>
             </div>
           </div>
+
+          {/* Kating Selector Tabs if multiple kating */}
+          {katingList.length > 1 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <span className="text-[11px] font-semibold text-muted-foreground shrink-0">Target Pesan:</span>
+              {katingList.map((k, idx) => (
+                <Button
+                  key={k.id}
+                  type="button"
+                  variant={selectedKatingIndex === idx ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedKatingIndex(idx)}
+                  className="h-7 text-xs px-2.5 shrink-0"
+                >
+                  {k.nama.split(" ")[0]} ({k.jenis_kelamin === "L" ? "Ikhwan" : "Akhwat"})
+                </Button>
+              ))}
+            </div>
+          )}
 
           {/* Chat Message Preview */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-muted-foreground">Pratinjau Pesan WhatsApp:</label>
+              <label className="text-xs font-semibold text-muted-foreground">
+                Pratinjau Pesan WhatsApp ({currentKating?.nama}):
+              </label>
               <Button
                 type="button"
                 variant="ghost"
@@ -100,43 +128,38 @@ export function WhatsAppPreviewDialog({
               </Button>
             </div>
             <div className="rounded-xl bg-emerald-950/10 dark:bg-emerald-950/40 border border-emerald-500/30 p-3 text-xs font-sans leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto">
-              {akangPayload.message}
+              {payload.message}
             </div>
           </div>
 
           {/* Action Buttons Responsive */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                if (!akangPayload.targetPhone) {
-                  toast.error("Nomor WhatsApp Akang tidak tersedia.");
-                  return;
-                }
-                openWhatsAppLink(akangPayload.targetPhone, akangPayload.message);
-                toast.success(`Membuka WhatsApp untuk ${akangPayload.targetName}...`);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex-1"
-            >
-              <Send className="mr-1.5 size-3.5" /> Chat Akang ({booking.kating_laki_nama?.split(" ")[0] || "Akang"})
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                if (!tetehPayload.targetPhone) {
-                  toast.error("Nomor WhatsApp Teteh tidak tersedia.");
-                  return;
-                }
-                openWhatsAppLink(tetehPayload.targetPhone, tetehPayload.message);
-                toast.success(`Membuka WhatsApp untuk ${tetehPayload.targetName}...`);
-              }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex-1"
-            >
-              <MessageSquare className="mr-1.5 size-3.5" /> Chat Teteh ({booking.kating_perempuan_nama?.split(" ")[0] || "Teteh"})
-            </Button>
+            {katingList.map((k) => {
+              const kPayload = generateApprovedBookingWAMessage({
+                booking,
+                targetKating: k,
+                anggotaList,
+              });
+              return (
+                <Button
+                  key={k.id}
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    if (!kPayload.targetPhone) {
+                      toast.error(`Nomor WhatsApp ${k.nama} tidak tersedia.`);
+                      return;
+                    }
+                    openWhatsAppLink(kPayload.targetPhone, kPayload.message);
+                    toast.success(`Membuka WhatsApp untuk ${kPayload.targetName}...`);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex-1"
+                >
+                  {k.jenis_kelamin === "L" ? <Send className="mr-1.5 size-3.5" /> : <MessageSquare className="mr-1.5 size-3.5" />}
+                  Chat {k.nama.split(" ")[0]}
+                </Button>
+              );
+            })}
 
             <Button
               type="button"

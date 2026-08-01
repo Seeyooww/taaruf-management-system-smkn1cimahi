@@ -84,8 +84,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       (b) =>
         b.tanggal.includes(q) ||
         (b.kelompok_nama && b.kelompok_nama.toLowerCase().includes(q)) ||
-        (b.kating_laki_nama && b.kating_laki_nama.toLowerCase().includes(q)) ||
-        (b.kating_perempuan_nama && b.kating_perempuan_nama.toLowerCase().includes(q))
+        (b.kating_list ?? []).some((k) => k.nama.toLowerCase().includes(q))
     );
 
     return {
@@ -217,7 +216,7 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
                       <div className="space-y-0.5">
                         <span className="font-semibold">{b.kelompok_nama}</span>
                         <p className="text-[11px] text-muted-foreground">
-                          {b.tanggal} &bull; {b.kating_laki_nama} &amp; {b.kating_perempuan_nama}
+                          {b.tanggal} &bull; {(b.kating_list ?? []).map((k) => k.nama).join(" & ") || "Kating"}
                         </p>
                       </div>
                       <Badge variant="outline">{b.status}</Badge>

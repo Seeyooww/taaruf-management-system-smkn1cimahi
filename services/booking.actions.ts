@@ -9,7 +9,7 @@ import {
   updateBookingContactedStatus,
   updateBookingStatus,
 } from "@/services/booking.service";
-import type { BookingStatus, Gender } from "@/types/database";
+import type { BookingStatus } from "@/types/database";
 
 export async function getBookingAction(kelompokId?: string) {
   return await fetchBookingList(kelompokId);
@@ -17,26 +17,33 @@ export async function getBookingAction(kelompokId?: string) {
 
 export async function getAvailableKatingAction(
   tanggal: string,
-  slot_id: string,
-  gender: Gender
+  slot_id: string
 ) {
   if (!tanggal || !slot_id) return [];
-  return await fetchAvailableKating(tanggal, slot_id, gender);
+  return await fetchAvailableKating(tanggal, slot_id);
 }
 
 export async function createBookingAction(formData: FormData) {
   const kelompok_id = String(formData.get("kelompok_id") || "").trim();
   const tanggal = String(formData.get("tanggal") || "").trim();
   const slot_id = String(formData.get("slot_id") || "").trim();
-  const kating_laki_id = String(formData.get("kating_laki_id") || "").trim();
-  const kating_perempuan_id = String(formData.get("kating_perempuan_id") || "").trim();
+  // Support multiple kating_ids via repeated FormData keys
+  const kating_ids = formData.getAll("kating_ids").map((v) => String(v).trim()).filter(Boolean);
   const catatan = String(formData.get("catatan") || "").trim();
   const jam_pulang = String(formData.get("jam_pulang") || "").trim();
+  const tempat_taaruf = String(formData.get("tempat_taaruf") || "").trim();
 
-  if (!kelompok_id || !tanggal || !slot_id || !kating_laki_id || !kating_perempuan_id) {
+  if (!kelompok_id || !tanggal || !slot_id) {
     return {
       success: false,
-      message: "Mohon lengkapi seluruh langkah pemilihan (Hari, Slot, Akang, & Teteh).",
+      message: "Mohon lengkapi seluruh langkah pemilihan (Hari, Slot).",
+    };
+  }
+
+  if (kating_ids.length === 0) {
+    return {
+      success: false,
+      message: "Mohon pilih minimal satu kating pendamping.",
     };
   }
 
@@ -44,10 +51,10 @@ export async function createBookingAction(formData: FormData) {
     kelompok_id,
     tanggal,
     slot_id,
-    kating_laki_id,
-    kating_perempuan_id,
+    kating_ids,
     catatan,
     jam_pulang: jam_pulang || null,
+    tempat_taaruf: tempat_taaruf || null,
   });
 
   if (result.success) {
@@ -75,11 +82,14 @@ export async function updateBookingStatusAction(
   return await updateBookingStatus(id, status);
 }
 
-export async function updateBookingContactedAction(id: string, gender: Gender) {
-  if (!id || !gender) {
+/**
+ * Update contacted status per kating_id (menggantikan per-gender).
+ */
+export async function updateBookingContactedAction(id: string, kating_id: string) {
+  if (!id || !kating_id) {
     return { success: false, message: "Parameter tidak valid." };
   }
-  return await updateBookingContactedStatus(id, gender);
+  return await updateBookingContactedStatus(id, kating_id);
 }
 
 export async function getAllBookingsForCalendarAction() {

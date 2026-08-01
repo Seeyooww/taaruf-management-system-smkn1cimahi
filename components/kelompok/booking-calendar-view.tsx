@@ -11,8 +11,8 @@ interface BookingCalendarViewProps {
   slotList: SlotWaktu[];
   /** Semua booking dari semua kelompok (compact) — untuk hitung ketersediaan kating */
   allCalendarBookings: CalendarBookingEntry[];
-  /** Total kating aktif per gender */
-  katingCounts: { totalL: number; totalP: number };
+  /** Total kating aktif (tidak dibedakan gender) */
+  katingCounts: { total: number };
   onSelectDate: (dateStr: string) => void;
 }
 
@@ -39,14 +39,14 @@ export function BookingCalendarView({
           b.status !== "Dibatalkan"
       );
 
-      const bookedL = new Set(activeOnSlot.map((b) => b.kating_laki_id).filter(Boolean));
-      const bookedP = new Set(activeOnSlot.map((b) => b.kating_perempuan_id).filter(Boolean));
+      // Collect all booked kating_ids for this slot+date
+      const bookedKatingIds = new Set<string>();
+      activeOnSlot.forEach((b) => {
+        (b.kating_ids ?? []).forEach((id) => bookedKatingIds.add(id));
+      });
 
-      // Penuh jika semua kating L atau semua kating P sudah terpakai
-      return (
-        (katingCounts.totalL > 0 && bookedL.size >= katingCounts.totalL) ||
-        (katingCounts.totalP > 0 && bookedP.size >= katingCounts.totalP)
-      );
+      // Penuh jika semua kating aktif sudah terpakai
+      return katingCounts.total > 0 && bookedKatingIds.size >= katingCounts.total;
     },
     [allCalendarBookings, katingCounts]
   );

@@ -60,10 +60,12 @@ export function AdminBookingView({
   const filteredData = React.useMemo(() => {
     return data.filter((item) => {
       const q = search.toLowerCase();
+      const katingMatch = (item.kating_list ?? []).some((k) =>
+        k.nama.toLowerCase().includes(q)
+      );
       const matchSearch =
         (item.kelompok_nama && item.kelompok_nama.toLowerCase().includes(q)) ||
-        (item.kating_laki_nama && item.kating_laki_nama.toLowerCase().includes(q)) ||
-        (item.kating_perempuan_nama && item.kating_perempuan_nama.toLowerCase().includes(q));
+        katingMatch;
 
       const matchDate = dateFilter ? item.tanggal === dateFilter : true;
       const matchSlot = slotFilter === "all" ? true : item.slot_id === slotFilter;
@@ -100,15 +102,14 @@ export function AdminBookingView({
     });
   };
 
-  const handleContactedUpdate = (bookingId: string, gender: "L" | "P", timeStr: string) => {
+  const handleContactedUpdate = (bookingId: string, katingId: string, timeStr: string) => {
     setData((prev) =>
       prev.map((b) => {
         if (b.id === bookingId) {
-          if (gender === "L") {
-            return { ...b, akang_contacted: true, akang_contacted_at: timeStr };
-          } else {
-            return { ...b, teteh_contacted: true, teteh_contacted_at: timeStr };
-          }
+          const kating_list = (b.kating_list ?? []).map((k) =>
+            k.id === katingId ? { ...k, contacted: true, contacted_at: timeStr } : k
+          );
+          return { ...b, kating_list };
         }
         return b;
       })
@@ -301,8 +302,21 @@ export function AdminBookingView({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="text-xs font-medium">Akang: {item.kating_laki_nama}</div>
-                          <div className="text-xs text-muted-foreground">Teteh: {item.kating_perempuan_nama}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {(item.kating_list ?? []).map((k) => (
+                              <Badge
+                                key={k.id}
+                                variant="outline"
+                                className={`text-[10px] ${
+                                  k.jenis_kelamin === "L"
+                                    ? "border-primary/30 text-primary"
+                                    : "border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {k.nama}
+                              </Badge>
+                            ))}
+                          </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(item.status)}</TableCell>
                         <TableCell className="text-right p-3">
