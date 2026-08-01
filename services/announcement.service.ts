@@ -17,9 +17,12 @@ export async function fetchAnnouncementList(): Promise<Announcement[]> {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      return data as Announcement[];
+    if (error) {
+      console.error("[fetchAnnouncementList] Supabase error:", error.message);
+      return [];
     }
+
+    return (data ?? []) as Announcement[];
   }
 
   return getMockAnnouncements();
@@ -44,9 +47,12 @@ export async function saveAnnouncement(data: {
       .select()
       .single();
 
-    if (!error && result) {
-      return { success: true, data: result };
+    if (error || !result) {
+      console.error("[saveAnnouncement] Supabase error:", error?.message);
+      return { success: false, message: `Gagal menyimpan pengumuman: ${error?.message ?? "Unknown error"}` };
     }
+
+    return { success: true, data: result };
   }
 
   const saved = saveMockAnnouncement(data);
@@ -56,7 +62,12 @@ export async function saveAnnouncement(data: {
 export async function deleteAnnouncement(id: string) {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
-    await supabase.from("announcements").delete().eq("id", id);
+    const { error } = await supabase.from("announcements").delete().eq("id", id);
+    if (error) {
+      console.error("[deleteAnnouncement] Supabase error:", error.message);
+      return { success: false, message: `Gagal menghapus pengumuman: ${error.message}` };
+    }
+    return { success: true };
   }
 
   deleteMockAnnouncement(id);

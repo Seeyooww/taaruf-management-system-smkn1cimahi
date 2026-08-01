@@ -17,11 +17,13 @@ export async function fetchSlotList(): Promise<SlotWaktu[]> {
       .select("*")
       .order("urutan", { ascending: true });
 
-    if (error || !slotData) {
-      return getMockSlotList();
+    if (error) {
+      // Log error but don't silently fallback — return empty to signal misconfiguration
+      console.error("[fetchSlotList] Supabase error:", error.message);
+      return [];
     }
 
-    return slotData as SlotWaktu[];
+    return (slotData ?? []) as SlotWaktu[];
   }
 
   return getMockSlotList();
@@ -50,9 +52,12 @@ export async function saveSlot(data: {
       .select()
       .single();
 
-    if (!error && result) {
-      return { success: true, data: result };
+    if (error || !result) {
+      console.error("[saveSlot] Supabase error:", error?.message);
+      return { success: false, message: `Gagal menyimpan slot: ${error?.message ?? "Unknown error"}` };
     }
+
+    return { success: true, data: result };
   }
 
   const saved = saveMockSlot(data);
@@ -62,7 +67,12 @@ export async function saveSlot(data: {
 export async function deleteSlot(id: string) {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
-    await supabase.from("slot_waktu").delete().eq("id", id);
+    const { error } = await supabase.from("slot_waktu").delete().eq("id", id);
+    if (error) {
+      console.error("[deleteSlot] Supabase error:", error.message);
+      return { success: false, message: `Gagal menghapus slot: ${error.message}` };
+    }
+    return { success: true };
   }
 
   deleteMockSlot(id);

@@ -11,6 +11,7 @@ interface UserProfileRow {
   role: SessionProfile["role"];
   display_name: string | null;
   must_change_password: boolean;
+  is_active: boolean;
 }
 
 export async function getMiddlewareSession(request: NextRequest) {
@@ -69,8 +70,9 @@ export async function getMiddlewareSession(request: NextRequest) {
 
   const { data } = await supabase
     .from("user_profiles")
-    .select("auth_user_id, username, role, display_name, must_change_password")
+    .select("auth_user_id, username, role, display_name, must_change_password, is_active")
     .eq("auth_user_id", user.id)
+    .eq("is_active", true)
     .maybeSingle<UserProfileRow>();
 
   if (!data) {

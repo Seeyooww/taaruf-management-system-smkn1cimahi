@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Activity, Search, UserCheck, Users } from "lucide-react";
+import { Activity, Search, UserCheck, UserMinus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { calculateBookingProgressAction } from "@/services/progress.actions";
-import type { Anggota, BookingWithDetails } from "@/types/database";
+import type { Anggota, BookingWithDetails, SubstituteEntry } from "@/types/database";
 
 interface ProgressConfirmationDialogProps {
   open: boolean;
@@ -35,17 +35,22 @@ export function ProgressConfirmationDialog({
   allAnggotaList,
   onProgressCalculated,
 }: ProgressConfirmationDialogProps) {
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-  const [searchSubstitute, setSearchSubstitute] = React.useState("");
+  // Set ID anggota asli yang HADIR (default: semua anggota kelompok)
+  const [presentIds, setPresentIds] = React.useState<Set<string>>(new Set());
+  // Map: absentId → Anggota pengganti (null = belum dipilih pengganti)
+  const [substituteMap, setSubstituteMap] = React.useState<Map<string, Anggota | null>>(new Map());
+  // ID anggota yang sedang dicarikan pengganti
+  const [searchingForId, setSearchingForId] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [isPending, startTransition] = React.useTransition();
 
-  // Members of the booking's kelompok
+  // Anggota asli kelompok booking
   const kelompokMembers = React.useMemo(() => {
     if (!booking) return [];
     return allAnggotaList.filter((a) => a.kelompok_id === booking.kelompok_id);
   }, [booking, allAnggotaList]);
 
-  // Reset selected IDs when booking changes (Default: all kelompok members checked)
+  // Reset state saat booking berubah
   React.useEffect(() => {
     if (booking) {
       const defaultIds = new Set(
@@ -53,59 +58,127 @@ export function ProgressConfirmationDialog({
           .filter((a) => a.kelompok_id === booking.kelompok_id)
           .map((a) => a.id)
       );
-      setSelectedIds(defaultIds);
+      setPresentIds(defaultIds);
+      setSubstituteMap(new Map());
+      setSearchingForId(null);
+      setSearchQuery("");
     }
   }, [booking, allAnggotaList]);
 
   if (!booking) return null;
 
-  const toggleCheck = (id: string) => {
-    setSelectedIds((prev) => {
+  // Toggle hadir/tidak-hadir untuk anggota asli
+  const togglePresent = (id: string) => {
+    setPresentIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
+        // Jadi tidak hadir: tambahkan ke substituteMap sebagai belum ada pengganti
         next.delete(id);
+        setSubstituteMap((sm) => {
+          const nsm = new Map(sm);
+          nsm.set(id, null);
+          return nsm;
+        });
       } else {
+        // Jadi hadir lagi: hapus dari substituteMap
         next.add(id);
+        setSubstituteMap((sm) => {
+          const nsm = new Map(sm);
+          nsm.delete(id);
+          return nsm;
+        });
+        if (searchingForId === id) setSearchingForId(null);
       }
       return next;
     });
   };
 
-  // Filter substitute candidates (members NOT in this kelompok)
+  // Pilih pengganti untuk anggota yang absen
+  const selectSubstitute = (absentId: string, candidate: Anggota) => {
+    setSubstituteMap((prev) => {
+      const next = new Map(prev);
+      next.set(absentId, candidate);
+      return next;
+    });
+    setSearchingForId(null);
+    setSearchQuery("");
+  };
+
+  // Hapus pengganti yang sudah dipilih
+  const removeSubstitute = (absentId: string) => {
+    setSubstituteMap((prev) => {
+      const next = new Map(prev);
+      next.set(absentId, null);
+      return next;
+    });
+  };
+
+  // Kandidat pengganti: bukan anggota kelompok ini, belum dipilih sebagai pengganti lain
+  const alreadyChosenSubstituteIds = new Set(
+    [...substituteMap.values()].filter(Boolean).map((a) => a!.id)
+  );
+
   const substituteCandidates = allAnggotaList.filter((a) => {
-    const notInKelompok = a.kelompok_id !== booking.kelompok_id;
-    const match = a.nama.toLowerCase().includes(searchSubstitute.toLowerCase());
-    return notInKelompok && match;
+    if (a.kelompok_id === booking.kelompok_id) return false;
+    if (alreadyChosenSubstituteIds.has(a.id)) return false;
+    if (!searchQuery.trim()) return true;
+    return (
+      a.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (a.kelompok_nama ?? "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
   const handleConfirm = () => {
-    const presentIds = Array.from(selectedIds);
-    if (presentIds.length === 0) {
-      toast.error("Silakan centang minimal 1 anggota yang hadir.");
-      return;
+    const presentOriginalIds = Array.from(presentIds);
+    const absentOriginalIds = [...substituteMap.keys()];
+    const substitutes: SubstituteEntry[] = [];
+
+    for (const [absentId, sub] of substituteMap.entries()) {
+      if (sub) {
+        substitutes.push({ substituteId: sub.id, replacesId: absentId });
+      }
     }
 
     startTransition(async () => {
-      const res = await calculateBookingProgressAction(booking.id, presentIds);
+      const res = await calculateBookingProgressAction(
+        booking.id,
+        presentOriginalIds,
+        absentOriginalIds,
+        substitutes
+      );
       if (res.success) {
-        toast.success(res.message);
+        toast.success("✔ " + res.message);
         onOpenChange(false);
         onProgressCalculated();
       } else {
-        toast.error(res.message);
+        toast.error("❌ " + res.message);
       }
     });
   };
 
+  const absentCount = substituteMap.size;
+  const substituteCount = [...substituteMap.values()].filter(Boolean).length;
+  const totalHadir = presentIds.size + substituteCount;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          // Reset ephemeral UI state when dialog is dismissed without submitting
+          setSearchingForId(null);
+          setSearchQuery("");
+        }
+        onOpenChange(isOpen);
+      }}
+    >
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-primary">
-            <Activity className="size-5" /> Konfirmasi Presensi & Hitung Progress
+            <Activity className="size-5" /> Konfirmasi Presensi &amp; Hitung Progress
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Checklist anggota yang hadir pada sesi ini. Anggota yang centang akan mendapatkan penambahan progress kating.
+            Centang anggota yang hadir. Jika ada yang tidak hadir, pilih penggantinya dari kelompok lain.
           </DialogDescription>
         </DialogHeader>
 
@@ -124,96 +197,159 @@ export function ProgressConfirmationDialog({
             </div>
           </div>
 
-          {/* Kelompok Member Checklist */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Users className="size-4 text-primary" /> Anggota Kelompok ({kelompokMembers.length})
-              </Label>
-              <Badge variant="outline" className="text-[10px]">
-                Hadir: {selectedIds.size} Anggota
+          {/* Summary Badges */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="success" className="text-[10px]">
+              <Users className="size-3 mr-1" /> Hadir: {totalHadir}
+            </Badge>
+            {absentCount > 0 && (
+              <Badge variant="destructive" className="text-[10px]">
+                <UserMinus className="size-3 mr-1" /> Tidak Hadir: {absentCount}
               </Badge>
-            </div>
+            )}
+            {substituteCount > 0 && (
+              <Badge variant="outline" className="text-[10px] border-indigo-500 text-indigo-400">
+                <UserCheck className="size-3 mr-1" /> Pengganti: {substituteCount}
+              </Badge>
+            )}
+          </div>
 
-            <div className="rounded-xl border p-3 space-y-2 bg-card max-h-48 overflow-y-auto">
+          {/* Anggota Kelompok Checklist */}
+          <div className="space-y-2">
+            <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              <Users className="size-4 text-primary" /> Anggota Kelompok ({kelompokMembers.length})
+            </Label>
+
+            <div className="space-y-2">
               {kelompokMembers.map((member) => {
-                const isChecked = selectedIds.has(member.id);
+                const isPresent = presentIds.has(member.id);
+                const isAbsent = substituteMap.has(member.id);
+                const chosenSub = substituteMap.get(member.id) ?? null;
+                const isSearchingThis = searchingForId === member.id;
+
                 return (
-                  <div
-                    key={member.id}
-                    onClick={() => toggleCheck(member.id)}
-                    className={`flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer ${
-                      isChecked
-                        ? "border-emerald-500/50 bg-emerald-500/10"
-                        : "border-border bg-muted/20 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Checkbox
-                        id={`check-${member.id}`}
-                        checked={isChecked}
-                        onCheckedChange={() => toggleCheck(member.id)}
-                      />
-                      <span className="text-xs font-semibold text-foreground">
-                        {member.nama} ({member.jenis_kelamin === "L" ? "Laki-laki" : "Perempuan"})
-                      </span>
+                  <div key={member.id} className="rounded-xl border overflow-hidden">
+                    {/* Row utama anggota */}
+                    <div
+                      onClick={() => togglePresent(member.id)}
+                      className={`flex items-center justify-between p-2.5 cursor-pointer transition-all ${
+                        isPresent
+                          ? "bg-emerald-500/10"
+                          : "bg-muted/20"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox
+                          id={`check-${member.id}`}
+                          checked={isPresent}
+                          onCheckedChange={() => togglePresent(member.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <span className="text-xs font-semibold">
+                          {member.nama}
+                          <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                            ({member.jenis_kelamin === "L" ? "L" : "P"})
+                          </span>
+                        </span>
+                      </div>
+                      {isPresent ? (
+                        <Badge variant="success" className="text-[10px]">Hadir</Badge>
+                      ) : (
+                        <Badge variant="destructive" className="text-[10px]">Tidak Hadir</Badge>
+                      )}
                     </div>
-                    {isChecked ? (
-                      <Badge variant="success">Hadir (+2 Progress)</Badge>
-                    ) : (
-                      <Badge variant="destructive">Tidak Hadir (0 Progress)</Badge>
+
+                    {/* Panel substitusi — hanya muncul jika tidak hadir */}
+                    {isAbsent && (
+                      <div className="border-t bg-card px-3 py-2 space-y-2">
+                        {chosenSub ? (
+                          /* Pengganti sudah dipilih */
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs">
+                              <UserCheck className="size-3.5 text-indigo-400 shrink-0" />
+                              <span className="text-muted-foreground">Digantikan oleh:</span>
+                              <span className="font-semibold text-indigo-400">
+                                {chosenSub.nama}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                ({chosenSub.kelompok_nama ?? "Kelompok Lain"})
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 text-rose-500 hover:bg-rose-500/10"
+                              onClick={() => removeSubstitute(member.id)}
+                            >
+                              <X className="size-3.5" />
+                            </Button>
+                          </div>
+                        ) : isSearchingThis ? (
+                          /* Mode pencarian pengganti */
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <div className="relative flex-1">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
+                                <Input
+                                  autoFocus
+                                  placeholder={`Cari pengganti untuk ${member.nama}...`}
+                                  value={searchQuery}
+                                  onChange={(e) => setSearchQuery(e.target.value)}
+                                  className="pl-7 h-7 text-xs"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 shrink-0"
+                                onClick={() => { setSearchingForId(null); setSearchQuery(""); }}
+                              >
+                                <X className="size-3.5" />
+                              </Button>
+                            </div>
+                            <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border bg-muted/20 p-1">
+                              {substituteCandidates.length === 0 ? (
+                                <p className="text-[11px] text-muted-foreground text-center py-2">
+                                  {searchQuery ? "Tidak ditemukan." : "Ketik nama untuk mencari..."}
+                                </p>
+                              ) : (
+                                substituteCandidates.slice(0, 8).map((cand) => (
+                                  <div
+                                    key={cand.id}
+                                    onClick={(e) => { e.stopPropagation(); selectSubstitute(member.id, cand); }}
+                                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer"
+                                  >
+                                    <span className="text-xs font-medium">{cand.nama}</span>
+                                    <span className="text-[10px] text-muted-foreground">
+                                      {cand.kelompok_nama ?? "—"}
+                                    </span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          /* Tombol untuk mulai mencari pengganti */
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs text-indigo-400 border-indigo-500/40 hover:bg-indigo-500/10"
+                            onClick={(e) => { e.stopPropagation(); setSearchingForId(member.id); setSearchQuery(""); }}
+                          >
+                            <UserCheck className="size-3.5 mr-1.5" />
+                            Pilih Pengganti untuk {member.nama}
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
               })}
             </div>
-          </div>
-
-          {/* Peserta Pengganti / Tambahan Section */}
-          <div className="space-y-2 border-t pt-3">
-            <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <UserCheck className="size-4 text-indigo-500" /> Tambah Peserta Pengganti (Dari Kelompok Lain)
-            </Label>
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Cari nama peserta pengganti..."
-                value={searchSubstitute}
-                onChange={(e) => setSearchSubstitute(e.target.value)}
-                className="pl-8 h-8 text-xs"
-              />
-            </div>
-
-            {searchSubstitute && (
-              <div className="rounded-xl border p-2 space-y-1 max-h-36 overflow-y-auto bg-card">
-                {substituteCandidates.length === 0 ? (
-                  <p className="text-[11px] text-muted-foreground text-center py-2">
-                    Tidak ditemukan peserta pengganti.
-                  </p>
-                ) : (
-                  substituteCandidates.map((cand) => {
-                    const isChecked = selectedIds.has(cand.id);
-                    return (
-                      <div
-                        key={cand.id}
-                        onClick={() => toggleCheck(cand.id)}
-                        className={`flex items-center justify-between p-1.5 rounded-md border text-xs cursor-pointer ${
-                          isChecked ? "bg-indigo-500/10 border-indigo-500/40" : "hover:bg-accent"
-                        }`}
-                      >
-                        <span>
-                          {cand.nama} ({cand.kelompok_nama || "Kelompok Lain"})
-                        </span>
-                        <Button size="sm" variant={isChecked ? "destructive" : "outline"} className="h-6 px-2 text-[10px]">
-                          {isChecked ? "Batal" : "+ Tambah Hadir"}
-                        </Button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -227,7 +363,7 @@ export function ProgressConfirmationDialog({
             disabled={isPending}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
           >
-            {isPending ? "Menghitung..." : "Hitung & Simpan Progress"}
+            {isPending ? "Menyimpan..." : "Hitung & Simpan Progress"}
           </Button>
         </DialogFooter>
       </DialogContent>

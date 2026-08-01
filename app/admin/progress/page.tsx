@@ -2,6 +2,8 @@ import { getKelompokAction } from "@/services/kelompok.actions";
 import { getAnggotaProgressAction } from "@/services/progress.actions";
 import { AdminProgressView } from "@/components/admin/admin-progress-view";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Monitoring Progress - Admin",
 };

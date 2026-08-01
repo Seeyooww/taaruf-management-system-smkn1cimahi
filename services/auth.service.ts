@@ -118,6 +118,33 @@ export async function getSessionProfile() {
   } satisfies SessionProfile;
 }
 
+/**
+ * Resolves the actual `kelompok.id` (UUID from public.kelompok table)
+ * for the currently logged-in kelompok user.
+ *
+ * IMPORTANT: session.id = auth_user_id (Supabase Auth UUID) ≠ kelompok.id.
+ * This function does the proper lookup by matching username.
+ *
+ * Returns null if the session is missing or no matching kelompok row is found.
+ */
+export async function getKelompokIdFromSession(): Promise<string | null> {
+  const session = await getSessionProfile();
+  if (!session || session.role !== "kelompok") return null;
+
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+    const { data } = await adminClient
+      .from("kelompok")
+      .select("id")
+      .eq("username", session.username)
+      .maybeSingle();
+    return data?.id ?? null;
+  }
+
+  // Dev mode: return the mock kelompok id stored in payload.sub
+  return session.id || null;
+}
+
 export async function loginWithUsername(payload: LoginPayload) {
   const normalizedUsername = payload.username.trim().toLowerCase();
 

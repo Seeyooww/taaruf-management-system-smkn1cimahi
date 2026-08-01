@@ -80,7 +80,10 @@ export function BookingStepperDialog({
     }
   }, [presetTanggal]);
 
-  // Load available Kating when date or slot changes
+  // Load available Kating when date or slot changes.
+  // BUG-22: selectedAkang and selectedTeteh are intentionally excluded from deps.
+  // Conflict validation is performed reactively via the returned lists,
+  // not by re-fetching every time a kating is selected.
   const loadAvailableKating = React.useCallback(async () => {
     if (!tanggal || !selectedSlot) return;
     setIsLoadingKating(true);
@@ -93,22 +96,28 @@ export function BookingStepperDialog({
       setAkangList(akangs);
       setTetehList(tetehs);
 
-      // Conflict validation if previously selected kating is no longer available
-      if (selectedAkang && !akangs.some((k) => k.id === selectedAkang.id)) {
-        setConflictWarning(`🔴 ${selectedAkang.nama} sudah dibooking pada ${tanggal} ${selectedSlot.nama_slot}. Silakan pilih Akang lain.`);
-        setSelectedAkang(null);
-      }
+      // Conflict validation: run against the freshly fetched lists
+      setSelectedAkang((prev) => {
+        if (prev && !akangs.some((k) => k.id === prev.id)) {
+          setConflictWarning(`🔴 ${prev.nama} sudah dibooking pada ${tanggal} ${selectedSlot.nama_slot}. Silakan pilih Akang lain.`);
+          return null;
+        }
+        return prev;
+      });
 
-      if (selectedTeteh && !tetehs.some((k) => k.id === selectedTeteh.id)) {
-        setConflictWarning(`🔴 ${selectedTeteh.nama} sudah dibooking pada ${tanggal} ${selectedSlot.nama_slot}. Silakan pilih Teteh lain.`);
-        setSelectedTeteh(null);
-      }
+      setSelectedTeteh((prev) => {
+        if (prev && !tetehs.some((k) => k.id === prev.id)) {
+          setConflictWarning(`🔴 ${prev.nama} sudah dibooking pada ${tanggal} ${selectedSlot.nama_slot}. Silakan pilih Teteh lain.`);
+          return null;
+        }
+        return prev;
+      });
     } catch {
       toast.error("Gagal memuat kating yang tersedia.");
     } finally {
       setIsLoadingKating(false);
     }
-  }, [tanggal, selectedSlot, selectedAkang, selectedTeteh]);
+  }, [tanggal, selectedSlot]);
 
   React.useEffect(() => {
     if (step >= 3) {

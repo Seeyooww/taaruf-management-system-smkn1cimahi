@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Activity, CalendarCheck, CalendarDays, Check, ListFilter, Search, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,7 @@ export function AdminBookingView({
   const [page, setPage] = React.useState(1);
   const pageSize = 8;
   const [isPending, startTransition] = React.useTransition();
+  const router = useRouter();
 
   const filteredData = React.useMemo(() => {
     return data.filter((item) => {
@@ -413,6 +415,10 @@ export function AdminBookingView({
               )
             );
           }
+          setIsProgressOpen(false);
+          setTargetBookingForProgress(null);
+          // Refresh server data so progress page and stats counters are up-to-date
+          router.refresh();
         }}
       />
     </div>

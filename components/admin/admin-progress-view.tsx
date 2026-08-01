@@ -450,7 +450,40 @@ export function AdminProgressView({
                 </div>
               )}
             </div>
-          </div>
+
+          {/* Riwayat Substitusi — hanya tampil jika ada */}
+          {(selectedAnggota?.substitution_history?.length ?? 0) > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <UserCheck className="size-3.5 text-indigo-400" /> Riwayat Substitusi
+              </label>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                {selectedAnggota?.substitution_history?.map((s, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 rounded-xl border bg-muted/20 text-xs flex items-center justify-between"
+                  >
+                    <div className="space-y-0.5">
+                      {s.replaces_nama ? (
+                        <p className="font-medium text-indigo-400">
+                          Hadir sebagai Pengganti{" "}
+                          <span className="font-bold">{s.replaces_nama}</span>
+                        </p>
+                      ) : (
+                        <p className="font-medium text-rose-400">
+                          Digantikan oleh{" "}
+                          <span className="font-bold">{s.replaced_by_nama}</span>
+                        </p>
+                      )}
+                      <p className="text-[11px] text-muted-foreground">{s.slot_nama}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">{s.tanggal}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
           <div className="flex justify-end pt-2">
             <Button variant="outline" size="sm" onClick={() => setIsDetailOpen(false)}>

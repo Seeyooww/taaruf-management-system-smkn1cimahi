@@ -5,6 +5,8 @@ import { getSettingsAction } from "@/services/settings.actions";
 import { getSlotAction } from "@/services/slot.actions";
 import { AdminBookingView } from "@/components/admin/admin-booking-view";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Booking Kelompok - Admin",
 };

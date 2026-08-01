@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { calculateBookingProgressAction } from "@/services/progress.actions";
-import type { Anggota, BookingWithDetails } from "@/types/database";
+import type { Anggota, BookingWithDetails, SubstituteEntry } from "@/types/database";
 
 interface BookingCompleteDialogProps {
   open: boolean;
@@ -66,9 +66,17 @@ export function BookingCompleteDialog({
     setError(null);
 
     try {
+      const presentOriginalIds = Array.from(selectedIds);
+      const absentOriginalIds = aktifAnggota
+        .filter((a) => !selectedIds.has(a.id))
+        .map((a) => a.id);
+      const substitutes: SubstituteEntry[] = [];
+
       const result = await calculateBookingProgressAction(
         booking.id,
-        Array.from(selectedIds)
+        presentOriginalIds,
+        absentOriginalIds,
+        substitutes
       );
 
       if (result.success) {
@@ -77,7 +85,7 @@ export function BookingCompleteDialog({
       } else {
         setError(result.message || "Gagal menyimpan progress.");
       }
-    } catch (e) {
+    } catch {
       setError("Terjadi kesalahan. Coba lagi.");
     } finally {
       setIsLoading(false);

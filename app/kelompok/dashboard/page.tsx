@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getAnnouncementAction } from "@/services/announcement.actions";
 import { getBookingAction } from "@/services/booking.actions";
 import { getAnggotaProgressAction } from "@/services/progress.actions";
 import { getSessionProfile } from "@/services/auth.service";
+import { getKelompokIdFromSession } from "@/services/auth.service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,13 +19,19 @@ import {
   Target,
 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Dashboard Kelompok - TMS",
 };
 
 export default async function KelompokDashboardPage() {
   const session = await getSessionProfile();
-  const kelompokId = session?.id || "kel-1";
+  const kelompokId = await getKelompokIdFromSession();
+
+  if (!kelompokId) {
+    redirect("/kelompok/login");
+  }
 
   const [bookingList, announcements, progressList] = await Promise.all([
     getBookingAction(kelompokId),
@@ -45,10 +53,26 @@ export default async function KelompokDashboardPage() {
       ? 0
       : Math.min(100, Math.round((totalMetCountSum / totalTargetKatingSum) * 100));
 
-  // Find Next Upcoming Approved/Pending Booking
-  const nextBooking = bookingList.find(
-    (b) => b.status === "Disetujui" || b.status === "Menunggu Konfirmasi"
-  );
+  // Find Next Upcoming Approved/Pending Booking (sorted by tanggal asc)
+  const sortedUpcoming = [...bookingList]
+    .filter((b) => b.status === "Disetujui" || b.status === "Menunggu Konfirmasi")
+    .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+  const nextBooking = sortedUpcoming[0] ?? null;
+
+  // Dynamic countdown: days until next booking
+  const countdownText = (() => {
+    if (!nextBooking) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const bookingDate = new Date(nextBooking.tanggal);
+    bookingDate.setHours(0, 0, 0, 0);
+    const diffMs = bookingDate.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return `Hari Ini pukul ${nextBooking.jam_mulai} WIB`;
+    if (diffDays === 1) return `Besok pukul ${nextBooking.jam_mulai} WIB`;
+    if (diffDays > 1) return `${diffDays} hari lagi (${nextBooking.jam_mulai} WIB)`;
+    return `Sudah berlalu`;
+  })();
 
   return (
     <div className="space-y-6">
@@ -114,13 +138,13 @@ export default async function KelompokDashboardPage() {
                   <span className="font-medium text-emerald-700 dark:text-emerald-300">{nextBooking.kating_perempuan_nama}</span>
                 </div>
 
-                {/* Countdown Badge */}
+                {/* Dynamic Countdown */}
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 mt-2 flex items-center justify-between text-emerald-800 dark:text-emerald-200">
                   <span className="text-[11px] font-semibold flex items-center gap-1.5">
                     <Clock className="size-3.5 text-emerald-500" /> Countdown Sesi:
                   </span>
                   <span className="font-mono font-bold text-xs">
-                    00 Hari 01 Jam 13 Menit (Besok {nextBooking.jam_mulai} WIB)
+                    {countdownText}
                   </span>
                 </div>
               </div>

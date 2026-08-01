@@ -1,4 +1,7 @@
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
+
 import { getAnggotaAction } from "@/services/anggota.actions";
 import { getBookingAction } from "@/services/booking.actions";
 import { getKatingAction } from "@/services/kating.actions";

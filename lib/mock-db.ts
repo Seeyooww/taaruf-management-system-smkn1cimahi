@@ -519,6 +519,8 @@ export function saveMockBookingProgress(bookingId: string, presentAnggotaIds: st
       booking_id: bookingId,
       anggota_id: anggotaId,
       hadir: true,
+      is_substitute: false,
+      replaces_anggota_id: null,
     });
 
     katingIds.forEach((katingId) => {

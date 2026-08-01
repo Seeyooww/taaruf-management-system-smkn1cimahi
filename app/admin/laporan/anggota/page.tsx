@@ -2,6 +2,8 @@ import { getKelompokAction } from "@/services/kelompok.actions";
 import { getLaporanAnggotaAction } from "@/services/reporting.actions";
 import { LaporanAnggotaView } from "@/components/admin/reporting/laporan-anggota-view";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Laporan Anggota - TMS Admin",
 };

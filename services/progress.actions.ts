@@ -4,6 +4,7 @@ import {
   fetchAnggotaProgressSummaries,
   saveBookingProgress,
 } from "@/services/progress.service";
+import type { SubstituteEntry } from "@/types/database";
 
 export async function getAnggotaProgressAction(kelompokId?: string) {
   return await fetchAnggotaProgressSummaries(kelompokId);
@@ -11,14 +12,18 @@ export async function getAnggotaProgressAction(kelompokId?: string) {
 
 export async function calculateBookingProgressAction(
   bookingId: string,
-  presentAnggotaIds: string[]
+  presentOriginalIds: string[] = [],
+  absentOriginalIds: string[] = [],
+  substitutes: SubstituteEntry[] = []
 ) {
-  if (!bookingId || !presentAnggotaIds || presentAnggotaIds.length === 0) {
-    return {
-      success: false,
-      message: "Silakan pilih minimal 1 anggota yang hadir untuk menghitung progress.",
-    };
+  if (!bookingId) {
+    return { success: false, message: "Booking ID tidak valid." };
   }
 
-  return await saveBookingProgress(bookingId, presentAnggotaIds);
+  const totalHadir = presentOriginalIds.length + substitutes.length;
+  if (totalHadir === 0 && absentOriginalIds.length === 0) {
+    return { success: false, message: "Tidak ada data kehadiran yang bisa disimpan." };
+  }
+
+  return await saveBookingProgress(bookingId, presentOriginalIds, absentOriginalIds, substitutes);
 }

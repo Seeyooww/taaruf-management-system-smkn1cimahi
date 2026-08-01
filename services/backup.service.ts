@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isSupabaseConfigured } from "@/lib/env";
 import {
   getMockAnggotaList,
   getMockAnnouncements,
@@ -14,36 +15,75 @@ import {
   simulateDayOneEvent,
   toggleLockEvent,
 } from "@/lib/mock-db";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export async function exportDatabaseToJSON() {
-  const settings = getMockSettings();
-  const kelompok = getMockKelompokList();
-  const anggota = getMockAnggotaList();
-  const kating = getMockKatingList();
-  const slotWaktu = getMockSlotList();
-  const templates = getMockWATemplates();
-  const announcements = getMockAnnouncements();
-  const booking = getMockBookingList();
+  if (isSupabaseConfigured()) {
+    try {
+      const adminClient = createSupabaseAdminClient();
 
-  const backupData = {
+      const [
+        { data: settings },
+        { data: kelompok },
+        { data: anggota },
+        { data: kating },
+        { data: slotWaktu },
+        { data: templates },
+        { data: announcements },
+        { data: booking },
+      ] = await Promise.all([
+        adminClient.from("settings").select("*").limit(1).maybeSingle(),
+        adminClient.from("kelompok").select("*").order("nomor_kelompok"),
+        adminClient.from("anggota").select("*").order("created_at"),
+        adminClient.from("kating").select("*").order("nama"),
+        adminClient.from("slot_waktu").select("*").order("urutan"),
+        adminClient.from("whatsapp_templates").select("*"),
+        adminClient.from("announcements").select("*"),
+        adminClient.from("booking").select("*").order("created_at"),
+      ]);
+
+      return {
+        metadata: {
+          app: "Taaruf Management System (TMS)",
+          version: "1.0.0",
+          exported_at: new Date().toISOString(),
+          source: "supabase",
+        },
+        tables: {
+          settings: settings ? [settings] : [],
+          kelompok: kelompok ?? [],
+          anggota: anggota ?? [],
+          kating: kating ?? [],
+          slotWaktu: slotWaktu ?? [],
+          templates: templates ?? [],
+          announcements: announcements ?? [],
+          booking: booking ?? [],
+        },
+      };
+    } catch (err) {
+      console.error("[exportDatabaseToJSON] error:", err);
+    }
+  }
+
+  // Dev fallback: export mock data
+  return {
     metadata: {
       app: "Taaruf Management System (TMS)",
       version: "1.0.0",
       exported_at: new Date().toISOString(),
+      source: "mock",
     },
     tables: {
-      settings,
-      kelompok,
-      anggota,
-      kating,
-      slotWaktu,
-      templates,
-      announcements,
-      booking,
+      settings: getMockSettings(),
+      kelompok: getMockKelompokList(),
+      anggota: getMockAnggotaList(),
+      kating: getMockKatingList(),
+      slotWaktu: getMockSlotList(),
+      templates: getMockWATemplates(),
+      announcements: getMockAnnouncements(),
+      booking: getMockBookingList(),
     },
   };
-
-  return backupData;
 }
 
 export async function restoreDatabaseFromJSON(jsonData: any) {
@@ -54,9 +94,13 @@ export async function restoreDatabaseFromJSON(jsonData: any) {
     };
   }
 
+  // BUG-19 fix: restore is not supported to avoid accidental data overwrites.
+  // Admin should use Supabase Dashboard for production restore operations.
   return {
-    success: true,
-    message: "Database berhasil dipulihkan dari file backup JSON!",
+    success: false,
+    message:
+      "Fitur restore otomatis tidak tersedia untuk keamanan data produksi. " +
+      "Gunakan Supabase Dashboard (supabase.com) untuk restore manual melalui SQL Editor.",
   };
 }
 

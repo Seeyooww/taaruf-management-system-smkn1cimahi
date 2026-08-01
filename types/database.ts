@@ -79,6 +79,14 @@ export interface BookingParticipant {
   booking_id: string;
   anggota_id: string;
   hadir: boolean;
+  is_substitute: boolean;              // true jika peserta ini pengganti dari kelompok lain
+  replaces_anggota_id: string | null;  // ID anggota asli yang digantikan
+}
+
+/** Satu pasangan substitusi: pengganti → yang digantikan */
+export interface SubstituteEntry {
+  substituteId: string;  // ID Fajar (pengganti)
+  replacesId: string;    // ID Eka (yang digantikan)
 }
 
 export interface ProgressRecord {
@@ -142,6 +150,16 @@ export interface MetKatingDetail {
   slot_nama: string;
 }
 
+export interface SubstitutionRecord {
+  booking_id: string;
+  tanggal: string;
+  slot_nama: string;
+  /** Jika anggota ini adalah PENGGANTI: nama yang digantikan */
+  replaces_nama?: string;
+  /** Jika anggota ini DIGANTIKAN: nama penggantinya */
+  replaced_by_nama?: string;
+}
+
 export interface AnggotaProgressSummary {
   anggota_id: string;
   nama: string;
@@ -155,4 +173,5 @@ export interface AnggotaProgressSummary {
   status_label: "Selesai" | "Hampir Selesai" | "Belum";
   status_color: "success" | "warning" | "destructive";
   kating_met_list: MetKatingDetail[];
+  substitution_history?: SubstitutionRecord[];
 }

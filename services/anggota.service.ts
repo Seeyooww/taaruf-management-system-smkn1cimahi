@@ -128,7 +128,15 @@ export async function parseAndImportAnggotaCSV(csvText: string) {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  let importedCount = 0;
+
+  type AnggotaRow = {
+    kelompok_id: string;
+    nama: string;
+    jenis_kelamin: Gender;
+    aktif: boolean;
+  };
+
+  const batch: AnggotaRow[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -138,18 +146,35 @@ export async function parseAndImportAnggotaCSV(csvText: string) {
     if (parts.length >= 3) {
       const kelompok_id = parts[0];
       const nama = parts[1];
-      const jenis_kelamin = parts[2].toUpperCase() === "P" ? "P" : "L";
+      const jenis_kelamin: Gender = parts[2].toUpperCase() === "P" ? "P" : "L";
 
       if (kelompok_id && nama) {
-        await saveAnggota({
-          kelompok_id,
-          nama,
-          jenis_kelamin,
-          aktif: true,
-        });
-        importedCount++;
+        batch.push({ kelompok_id, nama, jenis_kelamin, aktif: true });
       }
     }
+  }
+
+  if (batch.length === 0) {
+    return { success: true, importedCount: 0 };
+  }
+
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient.from("anggota").insert(batch);
+
+    if (error) {
+      console.error("[parseAndImportAnggotaCSV] batch insert error:", error.message);
+      return { success: false, message: `Gagal import CSV: ${error.message}`, importedCount: 0 };
+    }
+
+    return { success: true, importedCount: batch.length };
+  }
+
+  // Dev fallback: serial insert into mock
+  let importedCount = 0;
+  for (const row of batch) {
+    saveMockAnggota(row);
+    importedCount++;
   }
 
   return { success: true, importedCount };

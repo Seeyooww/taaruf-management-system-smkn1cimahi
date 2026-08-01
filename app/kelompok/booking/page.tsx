@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+import { getKelompokIdFromSession } from "@/services/auth.service";
 import {
   getAllBookingsForCalendarAction,
   getBookingAction,
@@ -10,13 +12,20 @@ import { getAnggotaAction } from "@/services/anggota.actions";
 import { getSessionProfile } from "@/services/auth.service";
 import { KelompokBookingView } from "@/components/kelompok/kelompok-booking-view";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
-  title: "Booking Saya - Kelompok",
+  title: "Booking Sesi - Kelompok",
 };
 
 export default async function KelompokBookingPage() {
   const session = await getSessionProfile();
-  const kelompokId = session?.id || "kel-1";
+  const kelompokId = await getKelompokIdFromSession();
+
+  if (!kelompokId) {
+    redirect("/kelompok/login");
+  }
+
   const kelompokNama = session?.displayName || session?.username || "Kelompok";
 
   const [bookingList, settings, slotList, templates, allBookings, katingCounts, allAnggota] =

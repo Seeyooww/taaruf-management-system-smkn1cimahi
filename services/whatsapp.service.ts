@@ -17,9 +17,12 @@ export async function fetchWATemplateList(): Promise<WhatsAppTemplate[]> {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      return data as WhatsAppTemplate[];
+    if (error) {
+      console.error("[fetchWATemplateList] Supabase error:", error.message);
+      return [];
     }
+
+    return (data ?? []) as WhatsAppTemplate[];
   }
 
   return getMockWATemplates();
@@ -42,9 +45,12 @@ export async function saveWATemplate(data: {
       .select()
       .single();
 
-    if (!error && result) {
-      return { success: true, data: result };
+    if (error || !result) {
+      console.error("[saveWATemplate] Supabase error:", error?.message);
+      return { success: false, message: `Gagal menyimpan template: ${error?.message ?? "Unknown error"}` };
     }
+
+    return { success: true, data: result };
   }
 
   const saved = saveMockWATemplate(data);
@@ -54,7 +60,12 @@ export async function saveWATemplate(data: {
 export async function deleteWATemplate(id: string) {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
-    await supabase.from("whatsapp_templates").delete().eq("id", id);
+    const { error } = await supabase.from("whatsapp_templates").delete().eq("id", id);
+    if (error) {
+      console.error("[deleteWATemplate] Supabase error:", error.message);
+      return { success: false, message: `Gagal menghapus template: ${error.message}` };
+    }
+    return { success: true };
   }
 
   deleteMockWATemplate(id);

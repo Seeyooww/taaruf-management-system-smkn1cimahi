@@ -1,6 +1,8 @@
 import { getLPJSummaryAction } from "@/services/reporting.actions";
 import { LPJView } from "@/components/admin/reporting/lpj-view";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "LPJ Rekap Akhir Acara - TMS Admin",
 };
