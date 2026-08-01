@@ -27,12 +27,14 @@ export async function saveAnggotaAction(formData: FormData) {
   }
 
   const res = await saveAnggota({ id, kelompok_id, nama, jenis_kelamin, aktif });
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menyimpan data anggota." };
   return { success: true, message: "Data Anggota berhasil disimpan.", data: res.data };
 }
 
 export async function deleteAnggotaAction(id: string) {
   if (!id) return { success: false, message: "ID Anggota tidak valid." };
-  await deleteAnggota(id);
+  const res = await deleteAnggota(id);
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menghapus anggota." };
   return { success: true, message: "Anggota berhasil dihapus." };
 }
 

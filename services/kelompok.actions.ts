@@ -23,13 +23,15 @@ export async function saveKelompokAction(formData: FormData) {
     };
   }
 
-  await saveKelompok({ nomor_kelompok, kelas, username });
+  const res = await saveKelompok({ nomor_kelompok, kelas, username });
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menyimpan data kelompok." };
   return { success: true, message: "Data Kelompok berhasil disimpan." };
 }
 
 export async function deleteKelompokAction(id: string) {
   if (!id) return { success: false, message: "ID Kelompok tidak valid." };
-  await deleteKelompok(id);
+  const res = await deleteKelompok(id);
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menghapus kelompok." };
   return { success: true, message: "Kelompok berhasil dihapus." };
 }
 

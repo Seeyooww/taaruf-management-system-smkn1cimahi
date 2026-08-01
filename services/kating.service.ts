@@ -6,22 +6,23 @@ import {
   getMockKatingList,
   saveMockKating,
 } from "@/lib/mock-db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Gender, Kating } from "@/types/database";
 
 export async function fetchKatingList(): Promise<Kating[]> {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    const { data: katingData, error } = await supabase
+    const adminClient = createSupabaseAdminClient();
+    const { data: katingData, error } = await adminClient
       .from("kating")
       .select("*")
       .order("nama", { ascending: true });
 
-    if (error || !katingData) {
-      return getMockKatingList();
+    if (error) {
+      console.error("[Supabase fetchKatingList error]", error.message);
+      return [];
     }
 
-    return katingData.map((k: any) => ({
+    return (katingData ?? []).map((k: any) => ({
       id: k.id,
       nama: k.nama,
       kelas: k.kelas,
@@ -44,8 +45,8 @@ export async function saveKating(data: {
   aktif: boolean;
 }) {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    const { data: result, error } = await supabase
+    const adminClient = createSupabaseAdminClient();
+    const { data: result, error } = await adminClient
       .from("kating")
       .upsert({
         ...(data.id ? { id: data.id } : {}),
@@ -58,9 +59,12 @@ export async function saveKating(data: {
       .select()
       .single();
 
-    if (!error && result) {
-      return { success: true, data: result };
+    if (error || !result) {
+      console.error("[Supabase saveKating error]", error?.message);
+      return { success: false, message: "Gagal menyimpan data kating." };
     }
+
+    return { success: true, data: result };
   }
 
   const saved = saveMockKating(data);
@@ -69,8 +73,15 @@ export async function saveKating(data: {
 
 export async function deleteKating(id: string) {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    await supabase.from("kating").delete().eq("id", id);
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient.from("kating").delete().eq("id", id);
+
+    if (error) {
+      console.error("[Supabase deleteKating error]", error.message);
+      return { success: false, message: "Gagal menghapus data kating." };
+    }
+
+    return { success: true };
   }
 
   deleteMockKating(id);
@@ -78,7 +89,10 @@ export async function deleteKating(id: string) {
 }
 
 export async function parseAndImportKatingCSV(csvText: string) {
-  const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   let importedCount = 0;
 
   for (let i = 0; i < lines.length; i++) {

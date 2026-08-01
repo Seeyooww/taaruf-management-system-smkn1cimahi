@@ -6,22 +6,23 @@ import {
   getMockAnggotaList,
   saveMockAnggota,
 } from "@/lib/mock-db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Anggota, Gender } from "@/types/database";
 
 export async function fetchAnggotaList(): Promise<Anggota[]> {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    const { data: anggotaData, error } = await supabase
+    const adminClient = createSupabaseAdminClient();
+    const { data: anggotaData, error } = await adminClient
       .from("anggota")
       .select("*, kelompok(nomor_kelompok, kelas)")
       .order("created_at", { ascending: false });
 
-    if (error || !anggotaData) {
-      return getMockAnggotaList();
+    if (error) {
+      console.error("[Supabase fetchAnggotaList error]", error.message);
+      return [];
     }
 
-    return anggotaData.map((a: any) => ({
+    return (anggotaData ?? []).map((a: any) => ({
       id: a.id,
       kelompok_id: a.kelompok_id,
       nama: a.nama,
@@ -45,8 +46,8 @@ export async function saveAnggota(data: {
   aktif: boolean;
 }) {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    const { data: result, error } = await supabase
+    const adminClient = createSupabaseAdminClient();
+    const { data: result, error } = await adminClient
       .from("anggota")
       .upsert({
         ...(data.id ? { id: data.id } : {}),
@@ -58,9 +59,12 @@ export async function saveAnggota(data: {
       .select()
       .single();
 
-    if (!error && result) {
-      return { success: true, data: result };
+    if (error || !result) {
+      console.error("[Supabase saveAnggota error]", error?.message);
+      return { success: false, message: "Gagal menyimpan data anggota." };
     }
+
+    return { success: true, data: result };
   }
 
   const saved = saveMockAnggota(data);
@@ -69,8 +73,15 @@ export async function saveAnggota(data: {
 
 export async function deleteAnggota(id: string) {
   if (isSupabaseConfigured()) {
-    const supabase = await createSupabaseServerClient();
-    await supabase.from("anggota").delete().eq("id", id);
+    const adminClient = createSupabaseAdminClient();
+    const { error } = await adminClient.from("anggota").delete().eq("id", id);
+
+    if (error) {
+      console.error("[Supabase deleteAnggota error]", error.message);
+      return { success: false, message: "Gagal menghapus data anggota." };
+    }
+
+    return { success: true };
   }
 
   deleteMockAnggota(id);
@@ -78,7 +89,10 @@ export async function deleteAnggota(id: string) {
 }
 
 export async function parseAndImportAnggotaCSV(csvText: string) {
-  const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = csvText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   let importedCount = 0;
 
   for (let i = 0; i < lines.length; i++) {

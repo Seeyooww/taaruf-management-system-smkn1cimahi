@@ -28,12 +28,14 @@ export async function saveKatingAction(formData: FormData) {
   }
 
   const res = await saveKating({ id, nama, kelas, jenis_kelamin, nomor_whatsapp, aktif });
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menyimpan data kating." };
   return { success: true, message: "Data Kating berhasil disimpan.", data: res.data };
 }
 
 export async function deleteKatingAction(id: string) {
   if (!id) return { success: false, message: "ID Kating tidak valid." };
-  await deleteKating(id);
+  const res = await deleteKating(id);
+  if (!res.success) return { success: false, message: res.message ?? "Gagal menghapus kating." };
   return { success: true, message: "Data Kating berhasil dihapus." };
 }
 
