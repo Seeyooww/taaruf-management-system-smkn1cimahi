@@ -31,6 +31,7 @@ export async function createBookingAction(formData: FormData) {
   const kating_laki_id = String(formData.get("kating_laki_id") || "").trim();
   const kating_perempuan_id = String(formData.get("kating_perempuan_id") || "").trim();
   const catatan = String(formData.get("catatan") || "").trim();
+  const jam_pulang = String(formData.get("jam_pulang") || "").trim();
 
   if (!kelompok_id || !tanggal || !slot_id || !kating_laki_id || !kating_perempuan_id) {
     return {
@@ -46,6 +47,7 @@ export async function createBookingAction(formData: FormData) {
     kating_laki_id,
     kating_perempuan_id,
     catatan,
+    jam_pulang: jam_pulang || null,
   });
 
   if (result.success) {

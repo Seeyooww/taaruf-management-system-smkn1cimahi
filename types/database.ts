@@ -56,6 +56,7 @@ export interface Booking {
   kating_perempuan_id: string;
   status: BookingStatus;
   catatan?: string | null;
+  jam_pulang?: string | null;
   created_at: string;
   akang_contacted?: boolean;
   akang_contacted_at?: string | null;

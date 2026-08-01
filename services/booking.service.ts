@@ -55,6 +55,7 @@ export async function fetchBookingList(
         kating_perempuan_id: b.kating_perempuan_id,
         status: b.status as BookingStatus,
         catatan: b.catatan,
+        jam_pulang: b.jam_pulang ?? null,
         created_at: b.created_at,
         akang_contacted: b.akang_contacted,
         akang_contacted_at: b.akang_contacted_at,
@@ -118,6 +119,7 @@ export async function createBooking(data: {
   kating_laki_id: string;
   kating_perempuan_id: string;
   catatan?: string;
+  jam_pulang?: string | null;
 }) {
   const settings = await fetchEventSettings();
   const bookingDate = new Date(data.tanggal);
@@ -166,6 +168,7 @@ export async function createBooking(data: {
         kating_perempuan_id: data.kating_perempuan_id,
         status: "Menunggu Konfirmasi",
         catatan: data.catatan || null,
+        jam_pulang: data.jam_pulang || null,
       })
       .select()
       .single();

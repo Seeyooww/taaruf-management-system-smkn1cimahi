@@ -296,7 +296,8 @@ export function AdminBookingView({
                         <TableCell>
                           <div className="font-medium text-xs text-primary">{item.tanggal}</div>
                           <div className="text-[11px] text-muted-foreground font-mono">
-                            {item.slot_nama} ({item.jam_mulai} - {item.jam_selesai})
+                            {item.slot_nama} ({item.jam_mulai} WIB)
+                            {item.jam_pulang ? ` • Pulang: ${item.jam_pulang} WIB` : ` - ${item.jam_selesai}`}
                           </div>
                         </TableCell>
                         <TableCell>

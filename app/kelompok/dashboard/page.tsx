@@ -126,8 +126,11 @@ export default async function KelompokDashboardPage() {
                   <span className="font-bold text-primary">{nextBooking.tanggal}</span>
                 </div>
                 <div className="flex items-center justify-between text-foreground">
-                  <span className="font-semibold">Slot Waktu:</span>
-                  <span>{nextBooking.slot_nama} ({nextBooking.jam_mulai} - {nextBooking.jam_selesai} WIB)</span>
+                  <span className="font-semibold">Slot &amp; Jam Pulang:</span>
+                  <span>
+                    {nextBooking.slot_nama} ({nextBooking.jam_mulai} WIB)
+                    {nextBooking.jam_pulang ? ` • Pulang: ${nextBooking.jam_pulang} WIB` : ` - ${nextBooking.jam_selesai} WIB`}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-foreground pt-1 border-t border-border/50">
                   <span className="font-semibold">Akang:</span>

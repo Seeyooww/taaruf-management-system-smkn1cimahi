@@ -391,6 +391,7 @@ export function createMockBooking(data: {
   kating_laki_id: string;
   kating_perempuan_id: string;
   catatan?: string;
+  jam_pulang?: string | null;
 }) {
   // 1. Check Event Lock
   if (isEventLocked()) {
@@ -443,6 +444,7 @@ export function createMockBooking(data: {
     kating_perempuan_id: data.kating_perempuan_id,
     status: "Menunggu Konfirmasi",
     catatan: data.catatan || null,
+    jam_pulang: data.jam_pulang || null,
     created_at: new Date().toISOString(),
     kelompok_nama: k ? `Kelompok ${k.nomor_kelompok} (${k.kelas})` : "Kelompok",
     slot_nama: s ? s.nama_slot : "Slot",

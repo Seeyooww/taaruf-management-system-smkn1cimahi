@@ -339,7 +339,7 @@ export function KelompokBookingView({
                       <TableCell>
                         <div className="font-medium text-xs">{item.slot_nama}</div>
                         <div className="text-[11px] text-muted-foreground font-mono">
-                          {item.jam_mulai} - {item.jam_selesai} WIB
+                          {item.jam_mulai} WIB {item.jam_pulang ? `• Pulang: ${item.jam_pulang} WIB` : `- ${item.jam_selesai} WIB`}
                         </div>
                       </TableCell>
                       <TableCell className="text-xs font-medium">{item.kating_laki_nama}</TableCell>

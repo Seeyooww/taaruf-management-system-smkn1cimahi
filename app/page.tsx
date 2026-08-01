@@ -2,13 +2,13 @@ import Link from "next/link";
 import { ArrowRight, Bell, Calendar, Shield, Sparkles, Users } from "lucide-react";
 
 import { ThemeSwitch } from "@/components/common/theme-switch";
+import { CountdownTimer } from "@/components/common/countdown-timer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   APP_DESCRIPTION,
   APP_NAME,
   APP_SHORT_NAME,
-  COUNTDOWN_PLACEHOLDER,
 } from "@/lib/constants";
 import { getAnnouncementAction } from "@/services/announcement.actions";
 
@@ -96,14 +96,7 @@ export default async function LandingPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
-                  <span className="text-2xl sm:text-3xl font-mono font-bold tracking-widest text-primary">
-                    {COUNTDOWN_PLACEHOLDER}
-                  </span>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Fitur countdown real-time akan aktif menjelang pelaksanaan event.
-                  </p>
-                </div>
+                <CountdownTimer />
               </CardContent>
             </Card>
 

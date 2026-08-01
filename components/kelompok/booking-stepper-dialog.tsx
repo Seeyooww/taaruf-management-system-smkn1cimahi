@@ -64,6 +64,7 @@ export function BookingStepperDialog({
   const [selectedAkang, setSelectedAkang] = React.useState<Kating | null>(null);
   const [selectedTeteh, setSelectedTeteh] = React.useState<Kating | null>(null);
   const [catatan, setCatatan] = React.useState("");
+  const [jamPulang, setJamPulang] = React.useState("16:30");
 
   // Kating options states
   const [akangList, setAkangList] = React.useState<Kating[]>([]);
@@ -179,6 +180,7 @@ export function BookingStepperDialog({
       formData.append("kating_laki_id", selectedAkang.id);
       formData.append("kating_perempuan_id", selectedTeteh.id);
       formData.append("catatan", catatan);
+      formData.append("jam_pulang", jamPulang);
 
       const res = await createBookingAction(formData);
 
@@ -191,6 +193,7 @@ export function BookingStepperDialog({
         setSelectedAkang(null);
         setSelectedTeteh(null);
         setCatatan("");
+        setJamPulang("16:30");
       } else {
         toast.error(`❌ ${res.message}`);
       }
@@ -314,6 +317,22 @@ export function BookingStepperDialog({
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-border/50">
+                <Label htmlFor="jamPulang" className="text-xs font-semibold flex items-center gap-1.5">
+                  <Clock className="size-3.5 text-primary" /> Estimasi Jam Pulang
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Tentukan estimasi waktu jam pulang kelompok secara fleksibel.
+                </p>
+                <Input
+                  id="jamPulang"
+                  type="time"
+                  value={jamPulang}
+                  onChange={(e) => setJamPulang(e.target.value)}
+                  className="text-xs w-36 h-9 font-mono font-semibold"
+                />
               </div>
             </div>
           )}
@@ -466,9 +485,9 @@ export function BookingStepperDialog({
                       <span className="font-bold text-foreground">{formattedDateLabel}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground block text-[11px]">Slot Waktu</span>
-                      <span className="font-bold text-primary">
-                        {selectedSlot?.nama_slot} ({selectedSlot?.jam_mulai} - {selectedSlot?.jam_selesai})
+                      <span className="text-muted-foreground block text-[11px]">Slot & Jam Pulang</span>
+                      <span className="font-bold text-foreground">
+                        {selectedSlot?.nama_slot} ({selectedSlot?.jam_mulai} WIB) &bull; Pulang: {jamPulang || "-"} WIB
                       </span>
                     </div>
                   </div>
