@@ -10,6 +10,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ interface KatingViewProps {
 }
 
 export function KatingView({ initialKating }: KatingViewProps) {
+  const router = useRouter();
   const [data, setData] = React.useState<Kating[]>(initialKating);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all");
@@ -186,6 +188,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
         toast.success("✔ " + res.message);
         setIsImportOpen(false);
         setCsvContent("");
+        router.refresh(); // Re-fetch data dari Supabase agar tabel terupdate
       } else {
         toast.error("❌ " + res.message);
       }

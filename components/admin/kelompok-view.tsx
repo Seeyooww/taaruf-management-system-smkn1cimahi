@@ -10,6 +10,7 @@ import {
   Upload,
   Users,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,7 @@ interface KelompokViewProps {
 }
 
 export function KelompokView({ initialData }: KelompokViewProps) {
+  const router = useRouter();
   const [data, setData] = React.useState<Kelompok[]>(initialData);
   const [search, setSearch] = React.useState("");
   const [page, setPage] = React.useState(1);
@@ -98,27 +100,7 @@ export function KelompokView({ initialData }: KelompokViewProps) {
         toast.success("✔ " + res.message);
         setIsFormOpen(false);
         setFormValues({ nomor_kelompok: "", kelas: "", username: "" });
-        // Local refresh
-        const num = parseInt(formValues.nomor_kelompok, 10);
-        setData((prev) => {
-          const idx = prev.findIndex((k) => k.nomor_kelompok === num);
-          if (idx !== -1) {
-            const updated = [...prev];
-            updated[idx] = { ...updated[idx], kelas: formValues.kelas, username: formValues.username };
-            return updated;
-          }
-          return [
-            ...prev,
-            {
-              id: `kel-${Date.now()}`,
-              nomor_kelompok: num,
-              kelas: formValues.kelas,
-              username: formValues.username,
-              created_at: new Date().toISOString(),
-              total_anggota: 0,
-            },
-          ];
-        });
+        router.refresh(); // Re-fetch data dari Supabase
       } else {
         toast.error("❌ " + res.message);
       }
@@ -149,6 +131,7 @@ export function KelompokView({ initialData }: KelompokViewProps) {
         toast.success("✔ " + res.message);
         setIsImportOpen(false);
         setCsvContent("");
+        router.refresh(); // Re-fetch data dari Supabase agar tabel terupdate
       } else {
         toast.error("❌ " + res.message);
       }

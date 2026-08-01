@@ -30,26 +30,11 @@ let mockSettings: EventSettings = {
   updated_at: new Date().toISOString(),
 };
 
-let mockKelompokList: Kelompok[] = [
-  { id: "kel-1", nomor_kelompok: 1, kelas: "X SIJA 1", username: "kelompok1", created_at: "2026-07-30T10:00:00Z" },
-  { id: "kel-2", nomor_kelompok: 2, kelas: "X SIJA 2", username: "kelompok2", created_at: "2026-07-30T10:05:00Z" },
-  { id: "kel-3", nomor_kelompok: 3, kelas: "X RPL 1", username: "kelompok3", created_at: "2026-07-30T10:10:00Z" },
-];
+let mockKelompokList: Kelompok[] = [];
 
-let mockAnggotaList: Anggota[] = [
-  { id: "ang-1", kelompok_id: "kel-1", nama: "Ahmad Fauzi", jenis_kelamin: "L", aktif: true, created_at: "2026-07-30T10:00:00Z" },
-  { id: "ang-2", kelompok_id: "kel-1", nama: "Siti Rahmawati", jenis_kelamin: "P", aktif: true, created_at: "2026-07-30T10:01:00Z" },
-  { id: "ang-3", kelompok_id: "kel-2", nama: "Budi Santoso", jenis_kelamin: "L", aktif: true, created_at: "2026-07-30T10:05:00Z" },
-  { id: "ang-4", kelompok_id: "kel-2", nama: "Dewi Lestari", jenis_kelamin: "P", aktif: true, created_at: "2026-07-30T10:06:00Z" },
-  { id: "ang-5", kelompok_id: "kel-3", nama: "Rizky Pratama", jenis_kelamin: "L", aktif: true, created_at: "2026-07-30T10:10:00Z" },
-];
+let mockAnggotaList: Anggota[] = [];
 
-let mockKatingList: Kating[] = [
-  { id: "kat-1", nama: "Akang Fikri Haikal", kelas: "XII SIJA 1", jenis_kelamin: "L", nomor_whatsapp: "081234567890", aktif: true, created_at: "2026-07-30T09:00:00Z" },
-  { id: "kat-2", nama: "Teteh Anisa Fitri", kelas: "XII RPL 2", jenis_kelamin: "P", nomor_whatsapp: "081987654321", aktif: true, created_at: "2026-07-30T09:05:00Z" },
-  { id: "kat-3", nama: "Akang Dimas Setiawan", kelas: "XI SIJA 2", jenis_kelamin: "L", nomor_whatsapp: "085712345678", aktif: true, created_at: "2026-07-30T09:10:00Z" },
-  { id: "kat-4", nama: "Teteh Nurul Aini", kelas: "XI TKJ 1", jenis_kelamin: "P", nomor_whatsapp: "082134567890", aktif: true, created_at: "2026-07-30T09:15:00Z" },
-];
+let mockKatingList: Kating[] = [];
 
 let mockSlotList: SlotWaktu[] = [
   { id: "slot-1", nama_slot: "Istirahat 1", jam_mulai: "09:30", jam_selesai: "10:00", urutan: 1, aktif: true },
