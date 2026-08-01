@@ -12,14 +12,49 @@ import type { Anggota, Gender } from "@/types/database";
 export async function fetchAnggotaList(): Promise<Anggota[]> {
   if (isSupabaseConfigured()) {
     const adminClient = createSupabaseAdminClient();
+
+    // Fetch anggota dengan embedded join ke kelompok
     const { data: anggotaData, error } = await adminClient
       .from("anggota")
       .select("*, kelompok(nomor_kelompok, kelas)")
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("[Supabase fetchAnggotaList error]", error.message);
-      return [];
+      console.error("[Supabase fetchAnggotaList error]", error.message, error.code, error.details);
+
+      // Fallback: fetch tanpa join, lalu fetch kelompok terpisah
+      const { data: anggotaRaw, error: err2 } = await adminClient
+        .from("anggota")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (err2) {
+        console.error("[Supabase fetchAnggotaList fallback error]", err2.message);
+        return [];
+      }
+
+      const { data: kelompokRaw } = await adminClient
+        .from("kelompok")
+        .select("id, nomor_kelompok, kelas");
+
+      const kelompokMap = new Map(
+        (kelompokRaw ?? []).map((k: any) => [k.id, k])
+      );
+
+      return (anggotaRaw ?? []).map((a: any) => {
+        const kel = kelompokMap.get(a.kelompok_id);
+        return {
+          id: a.id,
+          kelompok_id: a.kelompok_id,
+          nama: a.nama,
+          jenis_kelamin: a.jenis_kelamin as Gender,
+          aktif: a.aktif,
+          created_at: a.created_at,
+          kelompok_nama: kel
+            ? `Kelompok ${kel.nomor_kelompok} (${kel.kelas})`
+            : "Tidak Diketahui",
+        };
+      });
     }
 
     return (anggotaData ?? []).map((a: any) => ({

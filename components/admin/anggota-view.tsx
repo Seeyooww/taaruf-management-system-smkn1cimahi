@@ -10,6 +10,7 @@ import {
   Upload,
   UserCheck,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ interface AnggotaViewProps {
 }
 
 export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) {
+  const router = useRouter();
   const [data, setData] = React.useState<Anggota[]>(initialAnggota);
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<"all" | "active" | "inactive">("all");
@@ -188,6 +190,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
         toast.success("✔ " + res.message);
         setIsImportOpen(false);
         setCsvContent("");
+        router.refresh();
       } else {
         toast.error("❌ " + res.message);
       }
