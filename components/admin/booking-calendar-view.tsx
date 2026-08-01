@@ -26,7 +26,10 @@ export function BookingCalendarView({
 
     const curr = new Date(start);
     while (curr <= end) {
-      dates.push(curr.toISOString().split("T")[0]);
+      const dow = curr.getDay(); // 0=Minggu, 6=Sabtu
+      if (dow !== 0 && dow !== 6) {
+        dates.push(curr.toISOString().split("T")[0]);
+      }
       curr.setDate(curr.getDate() + 1);
     }
     return dates;

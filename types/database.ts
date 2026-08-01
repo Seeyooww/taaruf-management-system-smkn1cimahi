@@ -1,5 +1,14 @@
 export type Gender = "L" | "P";
 
+/** Compact booking entry used for calendar availability calculations */
+export interface CalendarBookingEntry {
+  tanggal: string;
+  slot_id: string;
+  kating_laki_id: string;
+  kating_perempuan_id: string;
+  status: string;
+}
+
 export interface Kelompok {
   id: string;
   nomor_kelompok: number;

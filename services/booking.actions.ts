@@ -2,8 +2,10 @@
 
 import {
   createBooking,
+  fetchAllBookingsForCalendar,
   fetchAvailableKating,
   fetchBookingList,
+  fetchKatingCounts,
   updateBookingContactedStatus,
   updateBookingStatus,
 } from "@/services/booking.service";
@@ -76,4 +78,12 @@ export async function updateBookingContactedAction(id: string, gender: Gender) {
     return { success: false, message: "Parameter tidak valid." };
   }
   return await updateBookingContactedStatus(id, gender);
+}
+
+export async function getAllBookingsForCalendarAction() {
+  return await fetchAllBookingsForCalendar();
+}
+
+export async function getKatingCountsAction() {
+  return await fetchKatingCounts();
 }

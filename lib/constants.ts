@@ -144,13 +144,13 @@ export const DASHBOARD_NAVIGATION: Record<
       category: "Operasional",
     },
     {
-      href: "/admin/panduan",
+      href: "/kelompok/panduan",
       label: "Panduan Kelompok",
       description: "Petunjuk cara booking & penggunaan sistem.",
       category: "Bantuan & Info",
     },
     {
-      href: "/admin/tentang",
+      href: "/kelompok/tentang",
       label: "Tentang Aplikasi",
       description: "Informasi aplikasi dan pengembang.",
       category: "Bantuan & Info",

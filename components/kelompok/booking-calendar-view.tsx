@@ -4,26 +4,62 @@ import * as React from "react";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import type { BookingWithDetails, EventSettings, SlotWaktu } from "@/types/database";
+import type { EventSettings, SlotWaktu, CalendarBookingEntry } from "@/types/database";
 
 interface BookingCalendarViewProps {
   settings: EventSettings;
   slotList: SlotWaktu[];
-  bookings: BookingWithDetails[];
+  /** Semua booking dari semua kelompok (compact) — untuk hitung ketersediaan kating */
+  allCalendarBookings: CalendarBookingEntry[];
+  /** Total kating aktif per gender */
+  katingCounts: { totalL: number; totalP: number };
   onSelectDate: (dateStr: string) => void;
 }
 
 export function BookingCalendarView({
   settings,
   slotList,
-  bookings,
+  allCalendarBookings,
+  katingCounts,
   onSelectDate,
 }: BookingCalendarViewProps) {
-  // Generate list of dates between tanggal_mulai and tanggal_selesai
+  const activeSlots = slotList.filter((s) => s.aktif);
+
+  /**
+   * Cek apakah sebuah slot pada tanggal tertentu "penuh".
+   * Penuh = semua kating L atau semua kating P sudah di-booking untuk slot+tanggal itu.
+   */
+  const isSlotFull = React.useCallback(
+    (dateStr: string, slotId: string): boolean => {
+      const activeOnSlot = allCalendarBookings.filter(
+        (b) =>
+          b.tanggal === dateStr &&
+          b.slot_id === slotId &&
+          b.status !== "Ditolak" &&
+          b.status !== "Dibatalkan"
+      );
+
+      const bookedL = new Set(activeOnSlot.map((b) => b.kating_laki_id).filter(Boolean));
+      const bookedP = new Set(activeOnSlot.map((b) => b.kating_perempuan_id).filter(Boolean));
+
+      // Penuh jika semua kating L atau semua kating P sudah terpakai
+      return (
+        (katingCounts.totalL > 0 && bookedL.size >= katingCounts.totalL) ||
+        (katingCounts.totalP > 0 && bookedP.size >= katingCounts.totalP)
+      );
+    },
+    [allCalendarBookings, katingCounts]
+  );
+
   const calendarDates = React.useMemo(() => {
-    const dates: { dateStr: string; label: string; dayName: string; status: "kosong" | "sebagian" | "penuh"; bookedCount: number; totalSlots: number }[] = [];
-    const activeSlots = slotList.filter((s) => s.aktif);
-    const totalSlotsCount = activeSlots.length;
+    const dates: {
+      dateStr: string;
+      label: string;
+      dayName: string;
+      status: "kosong" | "sebagian" | "penuh";
+      fullSlots: number;
+      totalSlots: number;
+    }[] = [];
 
     let startDate = new Date(settings.tanggal_mulai || "2026-08-01");
     let endDate = new Date(settings.tanggal_selesai || "2026-08-07");
@@ -35,40 +71,39 @@ export function BookingCalendarView({
 
     const current = new Date(startDate);
     while (current <= endDate) {
-      const dateStr = current.toISOString().split("T")[0];
-      const dayName = current.toLocaleDateString("id-ID", { weekday: "long" });
-      const label = current.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+      const dayOfWeek = current.getDay(); // 0=Minggu, 6=Sabtu
 
-      // Bookings on this date that are not rejected or cancelled
-      const activeBookingsOnDate = bookings.filter(
-        (b) => b.tanggal === dateStr && b.status !== "Ditolak" && b.status !== "Dibatalkan"
-      );
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        const dateStr = current.toISOString().split("T")[0];
+        const dayName = current.toLocaleDateString("id-ID", { weekday: "long" });
+        const label = current.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 
-      // Unique slots booked
-      const bookedSlotsSet = new Set(activeBookingsOnDate.map((b) => b.slot_id));
-      const bookedCount = bookedSlotsSet.size;
+        // Hitung jumlah slot yang penuh di hari ini
+        const fullSlotCount = activeSlots.filter((s) => isSlotFull(dateStr, s.id)).length;
+        const totalSlotsCount = activeSlots.length;
 
-      let status: "kosong" | "sebagian" | "penuh" = "kosong";
-      if (bookedCount >= totalSlotsCount && totalSlotsCount > 0) {
-        status = "penuh";
-      } else if (bookedCount > 0) {
-        status = "sebagian";
+        let status: "kosong" | "sebagian" | "penuh" = "kosong";
+        if (totalSlotsCount > 0 && fullSlotCount >= totalSlotsCount) {
+          status = "penuh";
+        } else if (fullSlotCount > 0) {
+          status = "sebagian";
+        }
+
+        dates.push({
+          dateStr,
+          label,
+          dayName,
+          status,
+          fullSlots: fullSlotCount,
+          totalSlots: totalSlotsCount,
+        });
       }
-
-      dates.push({
-        dateStr,
-        label,
-        dayName,
-        status,
-        bookedCount,
-        totalSlots: totalSlotsCount,
-      });
 
       current.setDate(current.getDate() + 1);
     }
 
     return dates;
-  }, [settings, slotList, bookings]);
+  }, [settings, activeSlots, isSlotFull]);
 
   return (
     <Card className="glass-card border shadow-xs">
@@ -86,7 +121,7 @@ export function BookingCalendarView({
           <div className="flex items-center gap-3 text-[11px] font-medium">
             <div className="flex items-center gap-1">
               <span className="size-2.5 rounded-full bg-emerald-500" />
-              <span>Kosong</span>
+              <span>Tersedia</span>
             </div>
             <div className="flex items-center gap-1">
               <span className="size-2.5 rounded-full bg-amber-500" />
@@ -105,25 +140,29 @@ export function BookingCalendarView({
             const isFull = item.status === "penuh";
             const isPartial = item.status === "sebagian";
 
-            let bgClass = "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
+            let bgClass =
+              "bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
             let badgeClass = "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300";
-            let badgeText = "Kosong";
+            let badgeText = "Tersedia";
 
             if (isFull) {
-              bgClass = "bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300";
+              bgClass =
+                "bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 cursor-not-allowed opacity-60";
               badgeClass = "bg-rose-500/20 text-rose-700 dark:text-rose-300";
               badgeText = "Penuh";
             } else if (isPartial) {
-              bgClass = "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300";
+              bgClass =
+                "bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300";
               badgeClass = "bg-amber-500/20 text-amber-700 dark:text-amber-300";
-              badgeText = `${item.bookedCount}/${item.totalSlots} Slot`;
+              badgeText = `${item.totalSlots - item.fullSlots}/${item.totalSlots} Slot`;
             }
 
             return (
               <button
                 key={item.dateStr}
                 type="button"
-                onClick={() => onSelectDate(item.dateStr)}
+                onClick={() => !isFull && onSelectDate(item.dateStr)}
+                disabled={isFull}
                 className={`p-3 rounded-xl border transition-all text-left flex flex-col justify-between space-y-2 group relative cursor-pointer ${bgClass}`}
               >
                 <div>
@@ -143,6 +182,11 @@ export function BookingCalendarView({
             );
           })}
         </div>
+        {calendarDates.length === 0 && (
+          <p className="text-center text-xs text-muted-foreground py-4">
+            Tidak ada hari taaruf yang tersedia dalam rentang ini.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

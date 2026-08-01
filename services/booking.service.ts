@@ -9,10 +9,13 @@ import {
   updateMockBookingStatus,
   type BookingWithDetails,
 } from "@/lib/mock-db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchEventSettings } from "@/services/settings.service";
 import { fetchSlotList } from "@/services/slot.service";
-import type { BookingStatus, Gender, Kating } from "@/types/database";
+import type { BookingStatus, CalendarBookingEntry, Gender, Kating } from "@/types/database";
+
+// CalendarBookingEntry is defined in @/types/database and re-exported for convenience
+export type { CalendarBookingEntry } from "@/types/database";
 
 export async function fetchBookingList(
   kelompokId?: string
@@ -37,6 +40,10 @@ export async function fetchBookingList(
     }
 
     const { data: bookingData, error } = await query;
+
+    if (error) {
+      console.error("[fetchBookingList] Supabase query error:", error.message, error.code);
+    }
 
     if (!error && bookingData) {
       return bookingData.map((b: any) => ({
@@ -163,11 +170,18 @@ export async function createBooking(data: {
       .select()
       .single();
 
-    if (!error && created) {
-      return { success: true, data: created };
+    if (error) {
+      console.error("[createBooking] Supabase insert error:", error.message, error.code);
+      return {
+        success: false,
+        message: `Gagal membuat booking: ${error.message}`,
+      };
     }
+
+    return { success: true, data: created };
   }
 
+  // Development-only fallback (hanya aktif jika Supabase tidak dikonfigurasi)
   const createdMock = createMockBooking(data);
   return { success: true, data: createdMock };
 }
@@ -180,11 +194,18 @@ export async function updateBookingStatus(id: string, status: BookingStatus) {
       .update({ status })
       .eq("id", id);
 
-    if (!error) {
-      return { success: true, message: `Status booking diperbarui menjadi "${status}".` };
+    if (error) {
+      console.error("[updateBookingStatus] Supabase update error:", error.message, error.code);
+      return {
+        success: false,
+        message: `Gagal memperbarui status booking: ${error.message}`,
+      };
     }
+
+    return { success: true, message: `Status booking diperbarui menjadi "${status}".` };
   }
 
+  // Development-only fallback
   updateMockBookingStatus(id, status);
   return { success: true, message: `Status booking diperbarui menjadi "${status}".` };
 }
@@ -196,18 +217,64 @@ export async function updateBookingContactedStatus(id: string, gender: Gender) {
   }) + " WIB";
 
   if (isSupabaseConfigured()) {
-    try {
-      const supabase = await createSupabaseServerClient();
-      const payload = gender === "L"
-        ? { akang_contacted: true, akang_contacted_at: timeStr }
-        : { teteh_contacted: true, teteh_contacted_at: timeStr };
+    const supabase = await createSupabaseServerClient();
+    const payload = gender === "L"
+      ? { akang_contacted: true, akang_contacted_at: timeStr }
+      : { teteh_contacted: true, teteh_contacted_at: timeStr };
 
-      await supabase.from("booking").update(payload).eq("id", id);
-    } catch {
-      // Fallback
+    const { error } = await supabase.from("booking").update(payload).eq("id", id);
+
+    if (error) {
+      console.error("[updateBookingContactedStatus] Supabase update error:", error.message, error.code);
+      return { success: false, message: `Gagal memperbarui status kontak: ${error.message}` };
     }
+
+    return { success: true };
   }
 
+  // Development-only fallback
   const updated = updateMockBookingContactedStatus(id, gender);
   return { success: true, data: updated };
+}
+
+/**
+ * Compact booking data for calendar availability calculation.
+ * Returns ALL bookings (all kelompok) with only the fields needed.
+ */
+export async function fetchAllBookingsForCalendar(): Promise<CalendarBookingEntry[]> {
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+    const { data, error } = await adminClient
+      .from("booking")
+      .select("tanggal, slot_id, kating_laki_id, kating_perempuan_id, status");
+
+    if (error) {
+      console.error("[fetchAllBookingsForCalendar] error:", error.message);
+      return [];
+    }
+    return (data ?? []) as CalendarBookingEntry[];
+  }
+  return [];
+}
+
+/**
+ * Returns total count of active kating per gender.
+ */
+export async function fetchKatingCounts(): Promise<{ totalL: number; totalP: number }> {
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+    const { data, error } = await adminClient
+      .from("kating")
+      .select("id, jenis_kelamin")
+      .eq("aktif", true);
+
+    if (error) {
+      console.error("[fetchKatingCounts] error:", error.message);
+      return { totalL: 0, totalP: 0 };
+    }
+    const totalL = (data ?? []).filter((k: any) => k.jenis_kelamin === "L").length;
+    const totalP = (data ?? []).filter((k: any) => k.jenis_kelamin === "P").length;
+    return { totalL, totalP };
+  }
+  return { totalL: 0, totalP: 0 };
 }

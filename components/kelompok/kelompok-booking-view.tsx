@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { CalendarCheck, CalendarDays, MessageSquare, Plus, Search } from "lucide-react";
+import {
+  CalendarCheck,
+  CalendarDays,
+  CheckCircle,
+  MessageSquare,
+  Plus,
+  Search,
+  XCircle,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,11 +26,14 @@ import {
 import { BookingStepperDialog } from "@/components/kelompok/booking-stepper-dialog";
 import { WhatsAppPreviewDialog } from "@/components/kelompok/whatsapp-preview-dialog";
 import { BookingCalendarView } from "@/components/kelompok/booking-calendar-view";
+import { BookingCompleteDialog } from "@/components/kelompok/booking-complete-dialog";
 import { WhatsAppApprovedActions } from "@/components/ui/whatsapp-approved-actions";
+import { updateBookingStatusAction } from "@/services/booking.actions";
 import type {
   Anggota,
   BookingStatus,
   BookingWithDetails,
+  CalendarBookingEntry,
   EventSettings,
   SlotWaktu,
   WhatsAppTemplate,
@@ -36,6 +47,8 @@ interface KelompokBookingViewProps {
   kelompokId: string;
   kelompokNama: string;
   anggotaList?: Anggota[];
+  allCalendarBookings: CalendarBookingEntry[];
+  katingCounts: { totalL: number; totalP: number };
 }
 
 export function KelompokBookingView({
@@ -46,15 +59,20 @@ export function KelompokBookingView({
   kelompokId,
   kelompokNama,
   anggotaList = [],
+  allCalendarBookings,
+  katingCounts,
 }: KelompokBookingViewProps) {
   const [bookings, setBookings] = React.useState<BookingWithDetails[]>(initialBookings);
   const [search, setSearch] = React.useState("");
+  const [loadingId, setLoadingId] = React.useState<string | null>(null);
 
   // Dialogs
   const [isStepperOpen, setIsStepperOpen] = React.useState(false);
   const [presetDate, setPresetDate] = React.useState<string | undefined>(undefined);
   const [isWaPreviewOpen, setIsWaPreviewOpen] = React.useState(false);
   const [selectedWaBooking, setSelectedWaBooking] = React.useState<BookingWithDetails | null>(null);
+  const [isCompleteOpen, setIsCompleteOpen] = React.useState(false);
+  const [completeBooking, setCompleteBooking] = React.useState<BookingWithDetails | null>(null);
 
   const filteredBookings = React.useMemo(() => {
     return bookings.filter((b) => {
@@ -96,6 +114,28 @@ export function KelompokBookingView({
     );
   };
 
+  /** Update status booking dan refleksikan di state */
+  const handleUpdateStatus = async (bookingId: string, status: BookingStatus) => {
+    setLoadingId(bookingId);
+    const result = await updateBookingStatusAction(bookingId, status);
+    setLoadingId(null);
+
+    if (result.success) {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
+      );
+    } else {
+      alert(result.message || "Gagal memperbarui status.");
+    }
+  };
+
+  /** Setelah taaruf selesai berhasil (dari BookingCompleteDialog) */
+  const handleTaarufCompleted = (bookingId: string) => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status: "Selesai" } : b))
+    );
+  };
+
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
       case "Disetujui":
@@ -107,10 +147,100 @@ export function KelompokBookingView({
       case "Dibatalkan":
         return <Badge variant="destructive">Dibatalkan</Badge>;
       case "Selesai":
-        return <Badge variant="secondary">Selesai</Badge>;
+        return <Badge variant="secondary">Selesai ✓</Badge>;
+      case "Tidak Dihitung":
+        return <Badge variant="outline">Tidak Dihitung</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
+  };
+
+  const renderActionCell = (item: BookingWithDetails) => {
+    const isLoading = loadingId === item.id;
+
+    // === Menunggu Konfirmasi: kelompok input hasil balasan WA ===
+    if (item.status === "Menunggu Konfirmasi") {
+      return (
+        <div className="flex items-center justify-end gap-1.5">
+          <span className="text-[10px] text-muted-foreground mr-1">Balasan WA:</span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+            disabled={isLoading}
+            onClick={() => handleUpdateStatus(item.id, "Disetujui")}
+          >
+            <CheckCircle className="size-3" />
+            Diterima
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs gap-1 text-rose-600 border-rose-500/40 hover:bg-rose-500/10"
+            disabled={isLoading}
+            onClick={() => handleUpdateStatus(item.id, "Ditolak")}
+          >
+            <XCircle className="size-3" />
+            Ditolak
+          </Button>
+        </div>
+      );
+    }
+
+    // === Disetujui: WA actions + setelah hari H ===
+    if (item.status === "Disetujui") {
+      return (
+        <div className="flex flex-col items-end gap-1.5">
+          <WhatsAppApprovedActions
+            booking={item}
+            anggotaList={anggotaList}
+            onContactedUpdate={handleContactedUpdate}
+            className="align-right"
+          />
+          <div className="flex gap-1.5 mt-1">
+            <span className="text-[10px] text-muted-foreground self-center">Setelah taaruf:</span>
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={isLoading}
+              onClick={() => {
+                setCompleteBooking(item);
+                setIsCompleteOpen(true);
+              }}
+            >
+              <CheckCircle className="size-3" />
+              Berhasil
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1 text-muted-foreground"
+              disabled={isLoading}
+              onClick={() => handleUpdateStatus(item.id, "Tidak Dihitung")}
+            >
+              <XCircle className="size-3" />
+              Tidak Berhasil
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // === Terminal states: Selesai, Ditolak, Tidak Dihitung, Dibatalkan ===
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setSelectedWaBooking(item);
+          setIsWaPreviewOpen(true);
+        }}
+        className="h-7 text-xs gap-1 text-muted-foreground"
+      >
+        <MessageSquare className="size-3" />
+        Detail WA
+      </Button>
+    );
   };
 
   return (
@@ -139,7 +269,8 @@ export function KelompokBookingView({
       <BookingCalendarView
         settings={settings}
         slotList={slotList}
-        bookings={bookings}
+        allCalendarBookings={allCalendarBookings}
+        katingCounts={katingCounts}
         onSelectDate={handleSelectCalendarDate}
       />
 
@@ -171,7 +302,7 @@ export function KelompokBookingView({
                   <TableHead className="text-xs">Akang (L)</TableHead>
                   <TableHead className="text-xs">Teteh (P)</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="text-xs text-right">Status Komunikasi & Aksi WA</TableHead>
+                  <TableHead className="text-xs text-right">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -215,27 +346,7 @@ export function KelompokBookingView({
                       <TableCell className="text-xs font-medium">{item.kating_perempuan_nama}</TableCell>
                       <TableCell>{getStatusBadge(item.status)}</TableCell>
                       <TableCell className="text-right p-3">
-                        {item.status === "Disetujui" ? (
-                          <WhatsAppApprovedActions
-                            booking={item}
-                            anggotaList={anggotaList}
-                            onContactedUpdate={handleContactedUpdate}
-                            className="align-right"
-                          />
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedWaBooking(item);
-                              setIsWaPreviewOpen(true);
-                            }}
-                            className="h-7 text-xs gap-1 text-muted-foreground"
-                          >
-                            <MessageSquare className="size-3" />
-                            Detail WA
-                          </Button>
-                        )}
+                        {renderActionCell(item)}
                       </TableCell>
                     </TableRow>
                   ))
@@ -266,6 +377,15 @@ export function KelompokBookingView({
         booking={selectedWaBooking}
         templates={templates}
         anggotaList={anggotaList}
+      />
+
+      {/* Booking Complete (Attendance) Dialog */}
+      <BookingCompleteDialog
+        open={isCompleteOpen}
+        onOpenChange={setIsCompleteOpen}
+        booking={completeBooking}
+        anggotaList={anggotaList}
+        onCompleted={handleTaarufCompleted}
       />
     </div>
   );
