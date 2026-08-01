@@ -130,6 +130,10 @@ export function BookingStepperDialog({
       if (next.has(kat.id)) {
         next.delete(kat.id);
       } else {
+        if (next.size >= 2) {
+          toast.error("Maksimal 2 kating pendamping per booking.");
+          return prev;
+        }
         next.add(kat.id);
       }
       return next;
@@ -151,7 +155,7 @@ export function BookingStepperDialog({
     }
 
     if (step === 3 && selectedKatingIds.size === 0) {
-      toast.error("Silakan pilih minimal satu kating pendamping.");
+      toast.error("Silakan pilih 1 atau 2 kating pendamping.");
       return;
     }
 
@@ -361,12 +365,12 @@ export function BookingStepperDialog({
                 <Label className="text-xs font-semibold">Pilih Kating Pendamping</Label>
                 <Badge variant="outline" className="text-[10px]">
                   <Users className="size-3 mr-1" />
-                  {selectedKatingIds.size} dipilih
+                  {selectedKatingIds.size}/2 dipilih
                 </Badge>
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Pilih satu atau lebih kating bebas (ikhwan, akhwat, atau campuran).
+                Pilih <strong>1 sampai 2</strong> kating pendamping (ikhwan, akhwat, atau campuran).
               </p>
 
               <div className="relative">

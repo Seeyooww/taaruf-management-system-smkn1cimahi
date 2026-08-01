@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Activity, CalendarCheck, CalendarDays, Check, ListFilter, Search, X } from "lucide-react";
+import { Activity, CalendarCheck, CalendarDays, Check, ListFilter, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/table";
 import { BookingCalendarView } from "@/components/admin/booking-calendar-view";
 import { ProgressConfirmationDialog } from "@/components/admin/progress-confirmation-dialog";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { WhatsAppApprovedActions } from "@/components/ui/whatsapp-approved-actions";
-import { updateBookingStatusAction } from "@/services/booking.actions";
+import { deleteBookingAction, updateBookingStatusAction } from "@/services/booking.actions";
 import type { Anggota, BookingStatus, BookingWithDetails, EventSettings, Kelompok, SlotWaktu } from "@/types/database";
 
 interface AdminBookingViewProps {
@@ -56,6 +57,10 @@ export function AdminBookingView({
   const pageSize = 8;
   const [isPending, startTransition] = React.useTransition();
   const router = useRouter();
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = React.useState<BookingWithDetails | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const filteredData = React.useMemo(() => {
     return data.filter((item) => {
@@ -114,6 +119,20 @@ export function AdminBookingView({
         return b;
       })
     );
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    const res = await deleteBookingAction(deleteTarget.id);
+    setIsDeleting(false);
+    setDeleteTarget(null);
+    if (res.success) {
+      toast.success("🗑️ Booking berhasil dihapus.");
+      setData((prev) => prev.filter((b) => b.id !== deleteTarget.id));
+    } else {
+      toast.error("❌ " + res.message);
+    }
   };
 
   const getStatusBadge = (status: BookingStatus) => {
@@ -377,6 +396,16 @@ export function AdminBookingView({
                               <option value="Dibatalkan">Dibatalkan</option>
                               <option value="Tidak Dihitung">Tidak Dihitung</option>
                             </select>
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              title="Hapus booking ini"
+                              onClick={() => setDeleteTarget(item)}
+                              className="h-7 w-7 flex items-center justify-center rounded-md border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -435,6 +464,21 @@ export function AdminBookingView({
           // Refresh server data so progress page and stats counters are up-to-date
           router.refresh();
         }}
+      />
+
+      {/* Confirm Delete Dialog */}
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Hapus Booking"
+        itemName={
+          deleteTarget
+            ? `${deleteTarget.kelompok_nama} — ${deleteTarget.tanggal} (${deleteTarget.slot_nama})`
+            : ""
+        }
+        description="Booking dan seluruh relasi kating pendamping akan dihapus permanen. Aksi ini tidak dapat dibatalkan."
+        onConfirm={handleDelete}
+        isPending={isDeleting}
       />
     </div>
   );

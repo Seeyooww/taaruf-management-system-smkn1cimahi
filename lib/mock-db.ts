@@ -356,6 +356,10 @@ export function getAvailableKatingList(tanggal: string, slot_id: string): Kating
   return activeKating.filter((k) => !busyKatingIds.has(k.id));
 }
 
+export function deleteMockBooking(id: string): void {
+  mockBookingList = mockBookingList.filter((b) => b.id !== id);
+}
+
 /**
  * STRICT BACKEND VALIDATED BOOKING CREATION
  */

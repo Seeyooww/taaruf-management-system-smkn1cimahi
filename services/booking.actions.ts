@@ -2,6 +2,7 @@
 
 import {
   createBooking,
+  deleteBooking,
   fetchAllBookingsForCalendar,
   fetchAvailableKating,
   fetchBookingList,
@@ -98,4 +99,9 @@ export async function getAllBookingsForCalendarAction() {
 
 export async function getKatingCountsAction() {
   return await fetchKatingCounts();
+}
+
+export async function deleteBookingAction(id: string) {
+  if (!id) return { success: false, message: "ID tidak valid." };
+  return await deleteBooking(id);
 }

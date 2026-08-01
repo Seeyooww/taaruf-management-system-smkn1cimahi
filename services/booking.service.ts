@@ -370,6 +370,43 @@ export async function fetchAllBookingsForCalendar(): Promise<CalendarBookingEntr
 }
 
 /**
+ * Permanently delete a booking and its booking_kating relations.
+ * Only admin should call this via the server action.
+ */
+export async function deleteBooking(id: string): Promise<{ success: boolean; message: string }> {
+  if (!id) return { success: false, message: "ID booking tidak valid." };
+
+  if (isSupabaseConfigured()) {
+    const supabase = createSupabaseAdminClient();
+
+    // Delete child rows first (if CASCADE is not set in DB)
+    const { error: bkError } = await supabase
+      .from("booking_kating")
+      .delete()
+      .eq("booking_id", id);
+
+    if (bkError) {
+      console.error("[deleteBooking] booking_kating delete error:", bkError.message);
+      return { success: false, message: `Gagal menghapus relasi kating: ${bkError.message}` };
+    }
+
+    const { error } = await supabase.from("booking").delete().eq("id", id);
+
+    if (error) {
+      console.error("[deleteBooking] booking delete error:", error.message);
+      return { success: false, message: `Gagal menghapus booking: ${error.message}` };
+    }
+
+    return { success: true, message: "Booking berhasil dihapus." };
+  }
+
+  // Mock fallback
+  const { deleteMockBooking } = await import("@/lib/mock-db");
+  deleteMockBooking(id);
+  return { success: true, message: "Booking berhasil dihapus." };
+}
+
+/**
  * Returns total count of active kating (total, no gender split).
  */
 export async function fetchKatingCounts(): Promise<{ total: number }> {
