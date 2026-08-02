@@ -28,6 +28,7 @@ export async function fetchKelompokList(): Promise<Kelompok[]> {
       nomor_kelompok: k.nomor_kelompok,
       kelas: k.kelas,
       username: k.username,
+      password_hint: k.password_hint ?? k.username,
       created_at: k.created_at,
       total_anggota: Array.isArray(k.anggota) ? k.anggota.length : 0,
     }));
@@ -58,16 +59,19 @@ export async function saveKelompok(data: {
       existing && existing.username !== username;
 
     // Upsert kelompok row
+    // For new kelompok, default password = username; on username change, reset password_hint too
+    const upsertPayload: Record<string, unknown> = {
+      nomor_kelompok: Number(data.nomor_kelompok),
+      kelas: data.kelas,
+      username,
+    };
+    if (isNew || usernameChanged) {
+      upsertPayload.password_hint = username;
+    }
+
     const { data: result, error } = await adminClient
       .from("kelompok")
-      .upsert(
-        {
-          nomor_kelompok: Number(data.nomor_kelompok),
-          kelas: data.kelas,
-          username,
-        },
-        { onConflict: "nomor_kelompok" }
-      )
+      .upsert(upsertPayload, { onConflict: "nomor_kelompok" })
       .select()
       .single();
 
@@ -319,6 +323,12 @@ export async function updateKelompokPassword(data: {
         updated_at: new Date().toISOString(),
       })
       .eq("auth_user_id", profile.auth_user_id);
+
+    // 3. Save plain-text password hint back to kelompok table so admin can see it
+    await adminClient
+      .from("kelompok")
+      .update({ password_hint: data.newPassword })
+      .eq("id", data.kelompokId);
 
     return {
       success: true,

@@ -273,7 +273,7 @@ export function KelompokView({ initialData }: KelompokViewProps) {
                         <TableCell>
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-xs select-none">
-                              {isVisible ? item.username : "••••••••"}
+                              {isVisible ? (item.password_hint ?? item.username) : "••••••••"}
                             </span>
                             <Button
                               variant="ghost"

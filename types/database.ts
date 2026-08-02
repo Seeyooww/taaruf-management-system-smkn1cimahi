@@ -24,6 +24,7 @@ export interface Kelompok {
   nomor_kelompok: number;
   kelas: string;
   username: string;
+  password_hint?: string | null;
   created_at: string;
   total_anggota?: number;
 }
