@@ -53,28 +53,28 @@ export function AppNavbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border bg-card/80 px-4 md:px-6 backdrop-blur-md">
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border bg-card/80 px-3 sm:px-4 md:px-6 backdrop-blur-md">
         {/* Left side: Mobile Toggle + Breadcrumb Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="md:hidden shrink-0 h-10 w-10 min-h-[40px] min-w-[40px]"
             onClick={onMobileMenuToggle}
             aria-label={isMobileMenuOpen ? "Tutup menu" : "Buka menu"}
           >
             {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </Button>
 
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
+          <Breadcrumb className="min-w-0 truncate">
+            <BreadcrumbList className="flex-nowrap">
+              <BreadcrumbItem className="hidden xs:inline-flex">
                 <span className="text-xs text-muted-foreground font-medium">TMS</span>
               </BreadcrumbItem>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage className="text-sm font-semibold text-foreground">
+              <BreadcrumbSeparator className="hidden xs:inline-flex" />
+              <BreadcrumbItem className="min-w-0">
+                <BreadcrumbPage className="text-xs sm:text-sm font-semibold text-foreground truncate max-w-[110px] xs:max-w-[160px] sm:max-w-none">
                   {pageTitle}
                 </BreadcrumbPage>
               </BreadcrumbItem>
@@ -83,7 +83,7 @@ export function AppNavbar({
         </div>
 
         {/* Right side: Global Search + Actions & User Menu */}
-        <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-1 sm:gap-2 md:gap-3 shrink-0">
           {/* Global Search Button */}
           <Button
             type="button"
@@ -105,7 +105,7 @@ export function AppNavbar({
             variant="outline"
             size="icon"
             onClick={() => setIsSearchOpen(true)}
-            className="sm:hidden"
+            className="sm:hidden h-9 w-9 min-h-[36px] min-w-[36px]"
             aria-label="Cari"
           >
             <Search className="size-4 text-primary" />
@@ -117,7 +117,7 @@ export function AppNavbar({
             variant="outline"
             size="icon"
             onClick={handleNotificationClick}
-            className="relative"
+            className="relative h-9 w-9 min-h-[36px] min-w-[36px]"
             aria-label="Notifikasi"
           >
             <Bell className="size-4" />

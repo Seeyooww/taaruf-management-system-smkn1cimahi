@@ -220,7 +220,7 @@ export function ProgressConfirmationDialog({
               <Users className="size-4 text-primary" /> Anggota Kelompok ({kelompokMembers.length})
             </Label>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1 scrollbar-thin">
               {kelompokMembers.map((member) => {
                 const isPresent = presentIds.has(member.id);
                 const isAbsent = substituteMap.has(member.id);

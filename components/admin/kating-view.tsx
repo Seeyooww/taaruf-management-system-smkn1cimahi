@@ -234,7 +234,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
             </CardTitle>
 
             {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto">
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <Input
@@ -244,7 +244,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  className="pl-8 h-8 text-xs"
+                  className="pl-8 h-9 text-xs w-full"
                 />
               </div>
 
@@ -254,7 +254,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
                   setGenderFilter(e.target.value as "all" | "L" | "P");
                   setPage(1);
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
               >
                 <option value="all">Semua Gender</option>
                 <option value="L">Akang (L)</option>
@@ -267,7 +267,7 @@ export function KatingView({ initialKating }: KatingViewProps) {
                   setStatusFilter(e.target.value as "all" | "active" | "inactive");
                   setPage(1);
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
               >
                 <option value="all">Semua Status</option>
                 <option value="active">Aktif Saja</option>

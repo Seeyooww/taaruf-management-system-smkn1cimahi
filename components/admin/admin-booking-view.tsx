@@ -209,8 +209,8 @@ export function AdminBookingView({
               </div>
 
               {/* Filters Row */}
-              <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
-                <div className="space-y-1">
+              <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 pt-1 border-t border-border">
+                <div className="w-full sm:w-auto">
                   <Input
                     type="date"
                     value={dateFilter}
@@ -218,7 +218,7 @@ export function AdminBookingView({
                       setDateFilter(e.target.value);
                       setPage(1);
                     }}
-                    className="h-8 text-xs w-36"
+                    className="h-9 text-xs w-full sm:w-36"
                   />
                 </div>
 
@@ -228,7 +228,7 @@ export function AdminBookingView({
                     setSlotFilter(e.target.value);
                     setPage(1);
                   }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
                 >
                   <option value="all">Semua Slot</option>
                   {slotList.map((s) => (
@@ -244,7 +244,7 @@ export function AdminBookingView({
                     setStatusFilter(e.target.value);
                     setPage(1);
                   }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
                 >
                   <option value="all">Semua Status</option>
                   <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
@@ -261,7 +261,7 @@ export function AdminBookingView({
                     setKelompokFilter(e.target.value);
                     setPage(1);
                   }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                  className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
                 >
                   <option value="all">Semua Kelompok</option>
                   {kelompokList.map((k) => (
@@ -281,7 +281,7 @@ export function AdminBookingView({
                       setStatusFilter("all");
                       setKelompokFilter("all");
                     }}
-                    className="h-8 text-xs text-muted-foreground"
+                    className="h-9 text-xs text-muted-foreground w-full sm:w-auto"
                   >
                     Reset Filter
                   </Button>
@@ -312,8 +312,8 @@ export function AdminBookingView({
                   ) : (
                     paginatedData.map((item) => (
                       <TableRow key={item.id} className="hover:bg-muted/20 transition-colors">
-                        <TableCell className="font-semibold text-xs">{item.kelompok_nama}</TableCell>
-                        <TableCell>
+                        <TableCell className="font-semibold text-xs whitespace-nowrap">{item.kelompok_nama}</TableCell>
+                        <TableCell className="whitespace-nowrap">
                           <div className="font-medium text-xs text-primary">{item.tanggal}</div>
                           <div className="text-[11px] text-muted-foreground font-mono">
                             {item.slot_nama} ({item.jam_mulai} WIB)
@@ -321,7 +321,7 @@ export function AdminBookingView({
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1 min-w-[140px]">
                             {(item.kating_list ?? []).map((k) => (
                               <Badge
                                 key={k.id}
@@ -337,9 +337,9 @@ export function AdminBookingView({
                             ))}
                           </div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(item.status)}</TableCell>
-                        <TableCell className="text-right p-3">
-                          <div className="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-2">
+                        <TableCell className="whitespace-nowrap">{getStatusBadge(item.status)}</TableCell>
+                        <TableCell className="text-right p-3 min-w-[200px]">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             {item.status === "Disetujui" && (
                               <WhatsAppApprovedActions
                                 booking={item}
@@ -349,12 +349,12 @@ export function AdminBookingView({
                             )}
 
                             {item.status === "Menunggu Konfirmasi" && (
-                              <div className="flex gap-1">
+                              <div className="flex flex-wrap gap-1">
                                 <Button
                                   size="sm"
                                   disabled={isPending}
                                   onClick={() => handleUpdateStatus(item, "Disetujui")}
-                                  className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  className="h-8 min-h-[32px] px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
                                 >
                                   <Check className="mr-1 size-3" /> Setujui
                                 </Button>
@@ -363,7 +363,7 @@ export function AdminBookingView({
                                   variant="destructive"
                                   disabled={isPending}
                                   onClick={() => handleUpdateStatus(item, "Ditolak")}
-                                  className="h-7 px-2 text-xs"
+                                  className="h-8 min-h-[32px] px-2 text-xs"
                                 >
                                   <X className="mr-1 size-3" /> Tolak
                                 </Button>
@@ -375,7 +375,7 @@ export function AdminBookingView({
                                 size="sm"
                                 disabled={isPending}
                                 onClick={() => handleUpdateStatus(item, "Selesai")}
-                                className="h-7 px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                                className="h-8 min-h-[32px] px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
                               >
                                 <Activity className="size-3" /> Presensi & Selesai
                               </Button>
@@ -387,7 +387,7 @@ export function AdminBookingView({
                               onChange={(e) =>
                                 handleUpdateStatus(item, e.target.value as BookingStatus)
                               }
-                              className="h-7 rounded-md border border-input bg-background px-1 text-[11px]"
+                              className="h-8 rounded-md border border-input bg-background px-1 text-[11px]"
                             >
                               <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
                               <option value="Disetujui">Disetujui</option>
@@ -402,7 +402,7 @@ export function AdminBookingView({
                               type="button"
                               title="Hapus booking ini"
                               onClick={() => setDeleteTarget(item)}
-                              className="h-7 w-7 flex items-center justify-center rounded-md border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                              className="h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-md border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
                             >
                               <Trash2 className="size-3.5" />
                             </button>

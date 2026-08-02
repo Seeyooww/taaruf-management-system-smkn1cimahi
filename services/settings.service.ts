@@ -43,6 +43,7 @@ export async function updateEventSettings(data: Partial<EventSettings>) {
         minimal_durasi: Number(data.minimal_durasi ?? current.minimal_durasi),
         tanggal_mulai: data.tanggal_mulai ?? current.tanggal_mulai,
         tanggal_selesai: data.tanggal_selesai ?? current.tanggal_selesai,
+        locked_event: data.locked_event !== undefined ? data.locked_event : Boolean(current.locked_event),
         updated_at: new Date().toISOString(),
       })
       .select()

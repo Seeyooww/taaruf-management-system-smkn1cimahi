@@ -86,6 +86,10 @@ export async function fetchBookingList(
 /**
  * Fetch all available kating for a given date + slot.
  * Gender is no longer filtered here — callers can filter if needed.
+ *
+ * BUG FIX: Query dua langkah untuk menghindari perilaku nested-filter
+ * PostgREST yang tidak reliable. Konflik hanya terjadi jika
+ * kombinasi (tanggal, slot_id, kating_id) sama — bukan hanya (tanggal, kating_id).
  */
 export async function fetchAvailableKating(
   tanggal: string,
@@ -100,13 +104,26 @@ export async function fetchAvailableKating(
 
     if (!katingList) return [];
 
-    // Find kating already booked on this date+slot (via booking_kating)
+    // Langkah 1: Cari semua booking_id yang aktif (bukan Ditolak/Dibatalkan)
+    // untuk kombinasi (tanggal, slot_id) yang tepat.
+    const { data: activeBookings } = await supabase
+      .from("booking")
+      .select("id")
+      .eq("tanggal", tanggal)
+      .eq("slot_id", slot_id)
+      .not("status", "in", '("Ditolak","Dibatalkan")');
+
+    if (!activeBookings || activeBookings.length === 0) {
+      return katingList as Kating[];
+    }
+
+    const activeBookingIds = activeBookings.map((b: any) => b.id);
+
+    // Langkah 2: Cari semua kating_id yang terdaftar di booking aktif tersebut.
     const { data: busyRows } = await supabase
       .from("booking_kating")
-      .select("kating_id, booking:booking_id(tanggal, slot_id, status)")
-      .filter("booking.tanggal", "eq", tanggal)
-      .filter("booking.slot_id", "eq", slot_id)
-      .not("booking.status", "in", '("Ditolak","Dibatalkan")');
+      .select("kating_id")
+      .in("booking_id", activeBookingIds);
 
     const busyIds = new Set<string>(
       (busyRows ?? []).map((r: any) => r.kating_id).filter(Boolean)

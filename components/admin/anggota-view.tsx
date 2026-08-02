@@ -237,7 +237,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
             </CardTitle>
 
             {/* Filters bar */}
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 w-full md:w-auto">
               <div className="relative w-full sm:w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                 <Input
@@ -247,7 +247,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  className="pl-8 h-8 text-xs"
+                  className="pl-8 h-9 text-xs w-full"
                 />
               </div>
 
@@ -257,7 +257,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
                   setStatusFilter(e.target.value as "all" | "active" | "inactive");
                   setPage(1);
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
               >
                 <option value="all">Semua Status</option>
                 <option value="active">Aktif Saja</option>
@@ -270,7 +270,7 @@ export function AnggotaView({ initialAnggota, kelompokList }: AnggotaViewProps) 
                   setKelompokFilter(e.target.value);
                   setPage(1);
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
               >
                 <option value="all">Semua Kelompok</option>
                 {kelompokList.map((k) => (

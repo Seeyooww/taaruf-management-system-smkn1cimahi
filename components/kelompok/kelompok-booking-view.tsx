@@ -162,12 +162,12 @@ export function KelompokBookingView({
     // === Menunggu Konfirmasi: kelompok input hasil balasan WA ===
     if (item.status === "Menunggu Konfirmasi") {
       return (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <span className="text-[10px] text-muted-foreground mr-1">Balasan WA:</span>
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+            className="h-8 min-h-[32px] text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
             disabled={isLoading}
             onClick={() => handleUpdateStatus(item.id, "Disetujui")}
           >
@@ -177,7 +177,7 @@ export function KelompokBookingView({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs gap-1 text-rose-600 border-rose-500/40 hover:bg-rose-500/10"
+            className="h-8 min-h-[32px] text-xs gap-1 text-rose-600 border-rose-500/40 hover:bg-rose-500/10"
             disabled={isLoading}
             onClick={() => handleUpdateStatus(item.id, "Ditolak")}
           >
@@ -198,11 +198,11 @@ export function KelompokBookingView({
             onContactedUpdate={handleContactedUpdate}
             className="align-right"
           />
-          <div className="flex gap-1.5 mt-1">
+          <div className="flex flex-wrap items-center justify-end gap-1.5 mt-1">
             <span className="text-[10px] text-muted-foreground self-center">Setelah taaruf:</span>
             <Button
               size="sm"
-              className="h-7 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-8 min-h-[32px] text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
               disabled={isLoading}
               onClick={() => {
                 setCompleteBooking(item);
@@ -215,7 +215,7 @@ export function KelompokBookingView({
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs gap-1 text-muted-foreground"
+              className="h-8 min-h-[32px] text-xs gap-1 text-muted-foreground"
               disabled={isLoading}
               onClick={() => handleUpdateStatus(item.id, "Tidak Dihitung")}
             >
@@ -236,7 +236,7 @@ export function KelompokBookingView({
           setSelectedWaBooking(item);
           setIsWaPreviewOpen(true);
         }}
-        className="h-7 text-xs gap-1 text-muted-foreground"
+        className="h-8 min-h-[32px] text-xs gap-1 text-muted-foreground"
       >
         <MessageSquare className="size-3" />
         Detail WA

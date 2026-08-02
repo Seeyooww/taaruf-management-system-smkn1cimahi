@@ -35,13 +35,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-[28px] border border-white/60 bg-white/85 p-6 shadow-[0_28px_80px_-24px_rgba(15,23,42,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/80",
+        "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[85vh] overflow-y-auto rounded-[24px] sm:rounded-[28px] border border-white/60 bg-white/90 p-4 sm:p-6 shadow-[0_28px_80px_-24px_rgba(15,23,42,0.35)] backdrop-blur-2xl dark:border-white/10 dark:bg-zinc-950/90",
         className,
       )}
       {...props}
     >
       {children}
-      <DialogClose className="absolute right-4 top-4 rounded-full p-2 text-zinc-500 transition hover:bg-zinc-950/5 hover:text-zinc-950 dark:hover:bg-white/10 dark:hover:text-white">
+      <DialogClose className="absolute right-3 top-3 sm:right-4 sm:top-4 rounded-full p-2 text-zinc-500 transition hover:bg-zinc-950/5 hover:text-zinc-950 dark:hover:bg-white/10 dark:hover:text-white">
         <X className="size-4" />
         <span className="sr-only">Tutup</span>
       </DialogClose>
@@ -54,7 +54,7 @@ function DialogHeader({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("space-y-2", className)} {...props} />;
+  return <div className={cn("space-y-1.5 sm:space-y-2 text-left", className)} {...props} />;
 }
 
 function DialogFooter({
@@ -62,7 +62,7 @@ function DialogFooter({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("mt-6 flex items-center justify-end gap-3", className)} {...props} />
+    <div className={cn("mt-5 sm:mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3", className)} {...props} />
   );
 }
 

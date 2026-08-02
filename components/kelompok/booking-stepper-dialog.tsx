@@ -63,11 +63,23 @@ export function BookingStepperDialog({
   const [selectedSlot, setSelectedSlot] = React.useState<SlotWaktu | null>(
     slotList.find((s) => s.aktif) || null
   );
-  // Multi-select: kating dapat dipilih bebas (ikhwan/akhwat kombinasi)
   const [selectedKatingIds, setSelectedKatingIds] = React.useState<Set<string>>(new Set());
   const [catatan, setCatatan] = React.useState("");
-  const [jamPulang, setJamPulang] = React.useState("16:30");
+  const initialIsPulang = Boolean(selectedSlot?.nama_slot.toLowerCase().includes("pulang"));
+  const [jamPulang, setJamPulang] = React.useState(initialIsPulang ? "16:30" : "");
   const [tempatTaaruf, setTempatTaaruf] = React.useState("");
+
+  const isPulangSlot = Boolean(selectedSlot?.nama_slot.toLowerCase().includes("pulang"));
+
+  const handleSelectSlot = (slot: SlotWaktu) => {
+    setSelectedSlot(slot);
+    const isPulang = slot.nama_slot.toLowerCase().includes("pulang");
+    if (!isPulang) {
+      setJamPulang("");
+    } else if (!jamPulang) {
+      setJamPulang("16:30");
+    }
+  };
 
   // Kating list state
   const [allKatingList, setAllKatingList] = React.useState<Kating[]>([]);
@@ -230,18 +242,18 @@ export function BookingStepperDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100%-1.5rem)] sm:max-w-xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 font-bold text-base">
-            <CalendarDays className="size-5 text-primary" /> Booking Sesi Taaruf Baru
+          <DialogTitle className="flex items-center gap-2 font-bold text-sm sm:text-base">
+            <CalendarDays className="size-4 sm:size-5 text-primary shrink-0" /> Booking Sesi Taaruf Baru
           </DialogTitle>
-          <DialogDescription className="text-xs">
+          <DialogDescription className="text-[11px] sm:text-xs">
             Langkah {step} dari 4: Hari &rarr; Slot &rarr; Kating &rarr; Preview Booking
           </DialogDescription>
         </DialogHeader>
 
         {/* Stepper Header Bar */}
-        <div className="flex items-center justify-between py-2 border-b text-xs font-semibold overflow-x-auto gap-1">
+        <div className="flex items-center justify-between py-2 border-b text-[11px] sm:text-xs font-semibold overflow-x-auto scrollbar-thin gap-1">
           {STEP_LABELS.map((label, i) => {
             const stepNum = i + 1;
             return (
@@ -303,7 +315,7 @@ export function BookingStepperDialog({
                     <button
                       key={slot.id}
                       type="button"
-                      onClick={() => setSelectedSlot(slot)}
+                      onClick={() => handleSelectSlot(slot)}
                       className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between space-y-1 cursor-pointer ${
                         isSelected
                           ? "border-primary bg-primary/10 ring-2 ring-primary/20"
@@ -322,21 +334,24 @@ export function BookingStepperDialog({
                 })}
               </div>
 
-              <div className="space-y-1.5 pt-2 border-t border-border/50">
-                <Label htmlFor="jamPulang" className="text-xs font-semibold flex items-center gap-1.5">
-                  <Clock className="size-3.5 text-primary" /> Estimasi Jam Pulang
-                </Label>
-                <p className="text-[11px] text-muted-foreground">
-                  Tentukan estimasi waktu jam pulang kelompok secara fleksibel.
-                </p>
-                <Input
-                  id="jamPulang"
-                  type="time"
-                  value={jamPulang}
-                  onChange={(e) => setJamPulang(e.target.value)}
-                  className="text-xs w-36 h-9 font-mono font-semibold"
-                />
-              </div>
+              {/* ESTIMASI JAM PULANG - Hanya Muncul Jika Slot Pulang Dipilih */}
+              {isPulangSlot && (
+                <div className="space-y-1.5 pt-2 border-t border-border/50 animate-in fade-in duration-200">
+                  <Label htmlFor="jamPulang" className="text-xs font-semibold flex items-center gap-1.5">
+                    <Clock className="size-3.5 text-primary" /> Estimasi Jam Pulang
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Tentukan estimasi waktu jam pulang kelompok secara fleksibel.
+                  </p>
+                  <Input
+                    id="jamPulang"
+                    type="time"
+                    value={jamPulang}
+                    onChange={(e) => setJamPulang(e.target.value)}
+                    className="text-xs w-36 h-9 font-mono font-semibold"
+                  />
+                </div>
+              )}
 
               {/* TEMPAT TAARUF SECTION */}
               <div className="space-y-1.5 pt-2 border-t border-border/50">
@@ -515,9 +530,12 @@ export function BookingStepperDialog({
                       <span className="font-bold text-foreground">{formattedDateLabel}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground block text-[11px]">Slot &amp; Jam Pulang</span>
+                      <span className="text-muted-foreground block text-[11px]">
+                        {isPulangSlot && jamPulang ? "Slot & Jam Pulang" : "Slot Waktu"}
+                      </span>
                       <span className="font-bold text-foreground">
-                        {selectedSlot?.nama_slot} ({selectedSlot?.jam_mulai} WIB) &bull; Pulang: {jamPulang || "-"} WIB
+                        {selectedSlot?.nama_slot} ({selectedSlot?.jam_mulai} WIB)
+                        {isPulangSlot && jamPulang ? ` • Pulang: ${jamPulang} WIB` : ""}
                       </span>
                     </div>
                     <div className="col-span-2 pt-1 border-t border-border/40">

@@ -225,3 +225,109 @@ export async function parseAndImportKelompokCSV(csvText: string) {
 
   return { success: true, importedCount };
 }
+
+export async function updateKelompokPassword(data: {
+  kelompokId: string;
+  username: string;
+  newPassword: string;
+}) {
+  const username = data.username.toLowerCase().trim();
+
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+
+    // 1. Find user_profiles row to get auth_user_id
+    const { data: profile } = await adminClient
+      .from("user_profiles")
+      .select("auth_user_id")
+      .eq("username", username)
+      .maybeSingle();
+
+    if (!profile || !profile.auth_user_id) {
+      // Try listing users by internal auth email
+      const email = buildInternalAuthEmail(username);
+      const { data: authUsers } = await adminClient.auth.admin.listUsers();
+      const existingUser = authUsers?.users?.find((u) => u.email === email);
+
+      if (existingUser) {
+        const { error: updateAuthErr } = await adminClient.auth.admin.updateUserById(
+          existingUser.id,
+          { password: data.newPassword }
+        );
+
+        if (updateAuthErr) {
+          console.error("[updateKelompokPassword] Supabase update error:", updateAuthErr.message);
+          return { success: false, message: `Gagal memperbarui password: ${updateAuthErr.message}` };
+        }
+
+        await adminClient.from("user_profiles").upsert(
+          {
+            auth_user_id: existingUser.id,
+            username,
+            role: "kelompok",
+            display_name: `Kelompok ${username.replace("kelompok", "")}`,
+            must_change_password: false,
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "auth_user_id" }
+        );
+
+        return { success: true, message: `Password kelompok "${username}" berhasil diperbarui di Supabase Auth.` };
+      } else {
+        // Create user if not present
+        const { data: newAuth, error: createErr } = await adminClient.auth.admin.createUser({
+          email,
+          password: data.newPassword,
+          email_confirm: true,
+        });
+
+        if (createErr || !newAuth.user) {
+          console.error("[updateKelompokPassword] Supabase createUser error:", createErr?.message);
+          return { success: false, message: `Gagal membuat akun login: ${createErr?.message}` };
+        }
+
+        await adminClient.from("user_profiles").insert({
+          auth_user_id: newAuth.user.id,
+          username,
+          role: "kelompok",
+          display_name: `Kelompok ${username.replace("kelompok", "")}`,
+          must_change_password: false,
+          is_active: true,
+        });
+
+        return { success: true, message: `Akun & Password kelompok "${username}" berhasil dibuat dan diperbarui di Supabase Auth.` };
+      }
+    }
+
+    // 2. Update password in Supabase Auth via Admin Client
+    const { error: updateErr } = await adminClient.auth.admin.updateUserById(
+      profile.auth_user_id,
+      { password: data.newPassword }
+    );
+
+    if (updateErr) {
+      console.error("[updateKelompokPassword] Supabase update error:", updateErr.message);
+      return { success: false, message: `Gagal memperbarui password di Supabase Auth: ${updateErr.message}` };
+    }
+
+    // Reset must_change_password
+    await adminClient
+      .from("user_profiles")
+      .update({
+        must_change_password: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("auth_user_id", profile.auth_user_id);
+
+    return {
+      success: true,
+      message: `Password akun kelompok "${username}" berhasil diperbarui di Supabase Auth.`,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Password kelompok "${username}" berhasil diperbarui.`,
+  };
+}

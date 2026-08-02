@@ -3,7 +3,10 @@
 import * as React from "react";
 import {
   Download,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
+  Key,
   Plus,
   Search,
   Trash2,
@@ -39,6 +42,7 @@ import {
   deleteKelompokAction,
   importKelompokAction,
   saveKelompokAction,
+  updateKelompokPasswordAction,
 } from "@/services/kelompok.actions";
 import type { Kelompok } from "@/types/database";
 
@@ -65,6 +69,13 @@ export function KelompokView({ initialData }: KelompokViewProps) {
   });
 
   const [csvContent, setCsvContent] = React.useState("");
+
+  // Password management state
+  const [pwTarget, setPwTarget] = React.useState<Kelompok | null>(null);
+  const [pwValue, setPwValue] = React.useState("");
+  const [pwConfirm, setPwConfirm] = React.useState("");
+  const [showPw, setShowPw] = React.useState(false);
+  const [visiblePasswords, setVisiblePasswords] = React.useState<Set<string>>(new Set());
 
   // Filter & Search
   const filteredData = React.useMemo(() => {
@@ -118,6 +129,44 @@ export function KelompokView({ initialData }: KelompokViewProps) {
       } else {
         toast.error("❌ " + res.message);
       }
+    });
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwTarget) return;
+    if (pwValue !== pwConfirm) {
+      toast.error("❌ Konfirmasi password tidak cocok.");
+      return;
+    }
+    if (pwValue.length < 6) {
+      toast.error("❌ Password minimal 6 karakter.");
+      return;
+    }
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.append("kelompok_id", pwTarget.id);
+      formData.append("username", pwTarget.username);
+      formData.append("new_password", pwValue);
+      const res = await updateKelompokPasswordAction(formData);
+      if (res.success) {
+        toast.success("🔑 " + res.message);
+        setPwTarget(null);
+        setPwValue("");
+        setPwConfirm("");
+        setShowPw(false);
+      } else {
+        toast.error("❌ " + res.message);
+      }
+    });
+  };
+
+  const togglePasswordVisibility = (id: string) => {
+    setVisiblePasswords((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
@@ -197,14 +246,15 @@ export function KelompokView({ initialData }: KelompokViewProps) {
                   <TableHead className="w-28 text-xs">No. Kelompok</TableHead>
                   <TableHead className="text-xs">Kelas</TableHead>
                   <TableHead className="text-xs">Username</TableHead>
+                  <TableHead className="text-xs">Password</TableHead>
                   <TableHead className="w-32 text-xs">Total Anggota</TableHead>
-                  <TableHead className="w-24 text-right text-xs">Aksi</TableHead>
+                  <TableHead className="w-32 text-right text-xs">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-10">
+                    <TableCell colSpan={6} className="text-center py-10">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Users className="size-8 text-muted-foreground/50" />
                         <p className="font-semibold text-xs text-foreground">Tidak ada data kelompok</p>
@@ -213,29 +263,66 @@ export function KelompokView({ initialData }: KelompokViewProps) {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedData.map((item) => (
-                    <TableRow key={item.id} className="hover:bg-muted/20 transition-colors">
-                      <TableCell className="font-bold text-xs">Kelompok {item.nomor_kelompok}</TableCell>
-                      <TableCell className="text-xs">{item.kelas}</TableCell>
-                      <TableCell className="font-mono text-xs">{item.username}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {item.total_anggota || 0} Anggota
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteTarget(item)}
-                          disabled={isPending}
-                          className="size-7 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
-                        >
-                          <Trash2 className="size-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  paginatedData.map((item) => {
+                    const isVisible = visiblePasswords.has(item.id);
+                    return (
+                      <TableRow key={item.id} className="hover:bg-muted/20 transition-colors">
+                        <TableCell className="font-bold text-xs">Kelompok {item.nomor_kelompok}</TableCell>
+                        <TableCell className="text-xs">{item.kelas}</TableCell>
+                        <TableCell className="font-mono text-xs">{item.username}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs select-none">
+                              {isVisible ? item.username : "••••••••"}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => togglePasswordVisibility(item.id)}
+                              title={isVisible ? "Sembunyikan" : "Tampilkan password"}
+                            >
+                              {isVisible ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {item.total_anggota || 0} Anggota
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setPwTarget(item);
+                                setPwValue("");
+                                setPwConfirm("");
+                                setShowPw(false);
+                              }}
+                              disabled={isPending}
+                              className="size-7 text-amber-600 hover:bg-amber-500/10 hover:text-amber-700"
+                              title="Ubah Password"
+                            >
+                              <Key className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteTarget(item)}
+                              disabled={isPending}
+                              className="size-7 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
+                              title="Hapus Kelompok"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -328,6 +415,95 @@ export function KelompokView({ initialData }: KelompokViewProps) {
               </Button>
               <Button type="submit" size="sm" disabled={isPending} className="text-xs bg-primary">
                 {isPending ? "Menyimpan..." : "Simpan Kelompok"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={Boolean(pwTarget)} onOpenChange={(open) => { if (!open) { setPwTarget(null); setPwValue(""); setPwConfirm(""); setShowPw(false); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <Key className="size-4 text-amber-500" />
+              Ubah Password Kelompok
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Password baru untuk{" "}
+              <span className="font-semibold text-foreground">
+                Kelompok {pwTarget?.nomor_kelompok} ({pwTarget?.username})
+              </span>.
+              Perubahan akan langsung berlaku di Supabase Auth.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleChangePassword} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="pw-username" className="text-xs">Username (tidak dapat diubah)</Label>
+              <Input
+                id="pw-username"
+                type="text"
+                value={pwTarget?.username ?? ""}
+                disabled
+                className="text-xs font-mono bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pw-new" className="text-xs">Password Baru</Label>
+              <div className="relative">
+                <Input
+                  id="pw-new"
+                  type={showPw ? "text" : "password"}
+                  placeholder="Minimal 6 karakter"
+                  required
+                  minLength={6}
+                  value={pwValue}
+                  onChange={(e) => setPwValue(e.target.value)}
+                  className="text-xs pr-9"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPw ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pw-confirm" className="text-xs">Konfirmasi Password Baru</Label>
+              <Input
+                id="pw-confirm"
+                type={showPw ? "text" : "password"}
+                placeholder="Ulangi password baru"
+                required
+                minLength={6}
+                value={pwConfirm}
+                onChange={(e) => setPwConfirm(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+            {pwConfirm && pwValue !== pwConfirm && (
+              <p className="text-[11px] text-rose-500">Password tidak cocok.</p>
+            )}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => { setPwTarget(null); setPwValue(""); setPwConfirm(""); setShowPw(false); }}
+                className="text-xs"
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isPending || !pwValue || pwValue !== pwConfirm}
+                className="text-xs bg-amber-500 hover:bg-amber-600 text-white"
+              >
+                {isPending ? "Menyimpan..." : "Simpan Password"}
               </Button>
             </DialogFooter>
           </form>

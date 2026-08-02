@@ -29,23 +29,35 @@ ALTER TABLE progress
   DEFERRABLE INITIALLY DEFERRED;
 
 -- ─────────────────────────────────────────────────────────────
--- BUG-09: Unique constraint on booking to prevent race conditions
--- Satu kating laki hanya boleh di-assign sekali per (tanggal, slot)
--- di booking yang aktif (bukan ditolak/dibatalkan).
+-- BUG-09 FIX: Unique constraint pada booking_kating
 --
--- Catatan: PostgreSQL partial unique index tidak bisa langsung
--- dikombinasikan dengan status filter di ALTER TABLE, 
--- sehingga kita buat sebagai CREATE UNIQUE INDEX.
+-- MASALAH SEBELUMNYA:
+--   Constraint lama (baris di bawah) menggunakan kolom
+--   kating_laki_id & kating_perempuan_id yang sudah DEPRECATED
+--   sejak Migration 08 (many-to-many via booking_kating).
+--   Kolom tersebut bernilai NULL untuk semua booking baru,
+--   sehingga constraint TIDAK PERNAH aktif → kating bisa
+--   dibooking berkali-kali pada tanggal yang sama di slot berbeda
+--   maupun slot yang sama tanpa hambatan apapun.
+--
+-- SOLUSI:
+--   Hapus index lama yang tidak relevan.
+--   Penegakan konflik kating kini sepenuhnya dilakukan di
+--   application layer (fetchAvailableKating: dua langkah query
+--   booking → booking_kating berdasarkan tanggal+slot_id),
+--   dan didukung oleh unique constraint (booking_id, kating_id)
+--   pada tabel booking_kating (Migration 08 baris 15) yang
+--   mencegah kating masuk dua kali dalam satu booking yang sama.
+--
+-- Kombinasi konflik yang benar: (tanggal, slot_id, kating_id).
 -- ─────────────────────────────────────────────────────────────
-CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_kating_laki_per_slot
-  ON booking(tanggal, slot_id, kating_laki_id)
-  WHERE status NOT IN ('Ditolak', 'Dibatalkan');
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_kating_perempuan_per_slot
-  ON booking(tanggal, slot_id, kating_perempuan_id)
-  WHERE status NOT IN ('Ditolak', 'Dibatalkan');
+-- Hapus index lama yang salah (menggunakan kolom deprecated)
+DROP INDEX IF EXISTS uq_booking_kating_laki_per_slot;
+DROP INDEX IF EXISTS uq_booking_kating_perempuan_per_slot;
 
 -- Tambahan: satu kelompok tidak boleh booking pada tanggal + slot yang sama
 CREATE UNIQUE INDEX IF NOT EXISTS uq_booking_kelompok_per_slot
   ON booking(kelompok_id, tanggal, slot_id)
   WHERE status NOT IN ('Ditolak', 'Dibatalkan');
+
