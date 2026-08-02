@@ -142,7 +142,7 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
           <Button size="sm" variant="outline" onClick={handleExportPDF} className="text-xs">
             <FileText className="size-3.5 mr-1 text-rose-500" /> PDF
           </Button>
-          <Button size="sm" onClick={triggerPrint} className="text-xs bg-slate-900 text-white hover:bg-slate-800">
+          <Button size="sm" onClick={triggerPrint} className="text-xs">
             <Printer className="size-3.5 mr-1" /> Cetak
           </Button>
         </div>

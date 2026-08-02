@@ -8,7 +8,13 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchEventSettings } from "@/services/settings.service";
-import type { AnggotaProgressSummary, MetKatingDetail, SubstituteEntry } from "@/types/database";
+import type {
+  AnggotaProgressSummary,
+  MetKatingDetail,
+  ParticipantEstimateItem,
+  ProgressEstimateResult,
+  SubstituteEntry,
+} from "@/types/database";
 
 /**
  * Fetches progress summaries for all anggota (or filtered by kelompokId).
@@ -287,4 +293,65 @@ export async function saveBookingProgress(
     ...substitutes.map((s) => s.substituteId),
   ];
   return saveMockBookingProgress(bookingId, allPresentIds);
+}
+
+/**
+  * Checks for each final participant whether their progress will increase (+1)
+  * or remain unchanged (already met all selected kating) based on history in database.
+  */
+export async function checkProgressEstimate(
+  participants: ParticipantEstimateItem[],
+  katingIds: string[]
+): Promise<ProgressEstimateResult> {
+  if (participants.length === 0 || katingIds.length === 0) {
+    return {
+      willIncreaseList: [],
+      alreadyMetList: [],
+      totalParticipants: 0,
+      totalIncrease: 0,
+      totalUnchanged: 0,
+    };
+  }
+
+  const anggotaIds = participants.map((p) => p.anggotaId);
+  const metPairSet = new Set<string>(); // "anggota_id:kating_id"
+
+  if (isSupabaseConfigured()) {
+    const supabase = await createSupabaseServerClient();
+    const { data: progressRows } = await supabase
+      .from("progress")
+      .select("anggota_id, kating_id")
+      .in("anggota_id", anggotaIds)
+      .in("kating_id", katingIds);
+
+    (progressRows ?? []).forEach((row: any) => {
+      metPairSet.add(`${row.anggota_id}:${row.kating_id}`);
+    });
+  }
+
+  const willIncreaseList: ParticipantEstimateItem[] = [];
+  const alreadyMetList: ParticipantEstimateItem[] = [];
+
+  for (const p of participants) {
+    let metCount = 0;
+    for (const kId of katingIds) {
+      if (metPairSet.has(`${p.anggotaId}:${kId}`)) {
+        metCount++;
+      }
+    }
+
+    if (metCount >= katingIds.length) {
+      alreadyMetList.push({ ...p, alreadyMetCount: metCount });
+    } else {
+      willIncreaseList.push({ ...p, alreadyMetCount: metCount });
+    }
+  }
+
+  return {
+    willIncreaseList,
+    alreadyMetList,
+    totalParticipants: participants.length,
+    totalIncrease: willIncreaseList.length,
+    totalUnchanged: alreadyMetList.length,
+  };
 }

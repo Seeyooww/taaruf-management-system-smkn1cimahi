@@ -10,15 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-zinc-950 text-white shadow-lg shadow-zinc-950/15 hover:-translate-y-0.5 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
+          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:scale-95",
         secondary:
-          "border border-white/30 bg-white/70 text-zinc-900 shadow-lg shadow-zinc-500/10 backdrop-blur-xl hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/10 dark:text-zinc-100 dark:hover:bg-white/15",
+          "border border-slate-200/80 bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80 dark:border-white/10",
         ghost:
-          "text-zinc-600 hover:bg-zinc-950/5 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white",
+          "text-foreground/80 hover:bg-accent hover:text-foreground",
         outline:
-          "border border-zinc-200 bg-white/70 text-zinc-900 backdrop-blur-xl hover:-translate-y-0.5 hover:border-zinc-300 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10",
+          "border border-input bg-background/80 text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground dark:border-white/15",
         destructive:
-          "bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-500",
+          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
       },
       size: {
         default: "h-11 min-h-[44px] px-5 text-sm",

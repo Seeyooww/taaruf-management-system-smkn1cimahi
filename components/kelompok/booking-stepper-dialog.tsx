@@ -13,7 +13,12 @@ import {
   MessageSquare,
   Search,
   Shield,
+  TrendingUp,
+  UserCheck,
+  UserMinus,
+  UserPlus,
   Users,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -30,7 +35,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBookingAction, getAvailableKatingAction } from "@/services/booking.actions";
-import type { Anggota, BookingWithDetails, EventSettings, Kating, SlotWaktu } from "@/types/database";
+import { getAnggotaAction } from "@/services/anggota.actions";
+import { checkProgressEstimateAction } from "@/services/progress.actions";
+import type {
+  Anggota,
+  BookingWithDetails,
+  EventSettings,
+  Kating,
+  ParticipantEstimateItem,
+  ProgressEstimateResult,
+  SlotWaktu,
+} from "@/types/database";
+
+interface SubEntry {
+  substituteId: string;
+  substituteName: string;
+  replacesId: string;
+  replacesName: string;
+}
 
 interface BookingStepperDialogProps {
   open: boolean;
@@ -58,7 +80,7 @@ export function BookingStepperDialog({
   const [step, setStep] = React.useState(1);
   const [isPending, startTransition] = React.useTransition();
 
-  // Form states
+  // ── Form states ────────────────────────────────────────────────
   const [tanggal, setTanggal] = React.useState(presetTanggal || settings.tanggal_mulai || "2026-08-01");
   const [selectedSlot, setSelectedSlot] = React.useState<SlotWaktu | null>(
     slotList.find((s) => s.aktif) || null
@@ -81,11 +103,19 @@ export function BookingStepperDialog({
     }
   };
 
-  // Kating list state
+  // ── Kating list state ──────────────────────────────────────────
   const [allKatingList, setAllKatingList] = React.useState<Kating[]>([]);
   const [isLoadingKating, setIsLoadingKating] = React.useState(false);
   const [conflictWarning, setConflictWarning] = React.useState<string | null>(null);
   const [searchKating, setSearchKating] = React.useState("");
+
+  // ── Step 4: Peserta state ──────────────────────────────────────
+  const [absentIds, setAbsentIds] = React.useState<Set<string>>(new Set());
+  const [substitutes, setSubstitutes] = React.useState<SubEntry[]>([]);
+  const [allAnggota, setAllAnggota] = React.useState<Anggota[]>([]);
+  const [subPickerFor, setSubPickerFor] = React.useState<Anggota | null>(null); // anggota yg digantikan
+  const [subSearch, setSubSearch] = React.useState("");
+  const [isLoadingAnggota, setIsLoadingAnggota] = React.useState(false);
 
   React.useEffect(() => {
     if (presetTanggal) {
@@ -136,6 +166,48 @@ export function BookingStepperDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, tanggal, selectedSlot?.id]);
 
+  // Load all anggota for substitute picker when entering step 4
+  React.useEffect(() => {
+    if (step === 4 && allAnggota.length === 0) {
+      setIsLoadingAnggota(true);
+      getAnggotaAction()
+        .then((list) => setAllAnggota(list))
+        .catch(() => toast.error("Gagal memuat daftar anggota."))
+        .finally(() => setIsLoadingAnggota(false));
+    }
+  }, [step, allAnggota.length]);
+
+  // ── Step 5: Progress Estimate state ────────────────────────────
+  const [estimateResult, setEstimateResult] = React.useState<ProgressEstimateResult | null>(null);
+  const [isLoadingEstimate, setIsLoadingEstimate] = React.useState(false);
+
+  React.useEffect(() => {
+    if (step === 5 && selectedKatingIds.size > 0) {
+      const finalParticipants: ParticipantEstimateItem[] = [
+        ...anggotaList
+          .filter((a) => !absentIds.has(a.id))
+          .map((a) => ({ anggotaId: a.id, nama: a.nama })),
+        ...substitutes.map((s) => ({
+          anggotaId: s.substituteId,
+          nama: s.substituteName,
+          isSubstitute: true,
+          replacesNama: s.replacesName,
+        })),
+      ];
+
+      const kIds = Array.from(selectedKatingIds);
+
+      setIsLoadingEstimate(true);
+      checkProgressEstimateAction(finalParticipants, kIds)
+        .then((res) => setEstimateResult(res))
+        .catch((err) => {
+          console.error("[checkProgressEstimateAction error]", err);
+          setEstimateResult(null);
+        })
+        .finally(() => setIsLoadingEstimate(false));
+    }
+  }, [step, selectedKatingIds, absentIds, substitutes, anggotaList]);
+
   const toggleKating = (kat: Kating) => {
     setSelectedKatingIds((prev) => {
       const next = new Set(prev);
@@ -153,6 +225,69 @@ export function BookingStepperDialog({
     setConflictWarning(null);
   };
 
+  const toggleAbsent = (anggota: Anggota) => {
+    setAbsentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(anggota.id)) {
+        next.delete(anggota.id);
+        // Remove any substitute assigned for this anggota
+        setSubstitutes((subs) => subs.filter((s) => s.replacesId !== anggota.id));
+      } else {
+        next.add(anggota.id);
+      }
+      return next;
+    });
+  };
+
+  const addSubstitute = (candidate: Anggota) => {
+    if (!subPickerFor) return;
+
+    // Can't substitute with someone from the same kelompok
+    const alreadySub = substitutes.some((s) => s.substituteId === candidate.id);
+    if (alreadySub) {
+      toast.error("Anggota ini sudah menjadi pengganti untuk anggota lain.");
+      return;
+    }
+
+    // Replace existing sub for this replacesId, or add new
+    setSubstitutes((prev) => {
+      const filtered = prev.filter((s) => s.replacesId !== subPickerFor.id);
+      return [
+        ...filtered,
+        {
+          substituteId: candidate.id,
+          substituteName: candidate.nama,
+          replacesId: subPickerFor.id,
+          replacesName: subPickerFor.nama,
+        },
+      ];
+    });
+    setSubPickerFor(null);
+    setSubSearch("");
+  };
+
+  const removeSubstitute = (replacesId: string) => {
+    setSubstitutes((prev) => prev.filter((s) => s.replacesId !== replacesId));
+  };
+
+  // Derived peserta state
+  const presentOriginalIds = anggotaList.filter((a) => !absentIds.has(a.id)).map((a) => a.id);
+  const absentOriginalIds = Array.from(absentIds);
+  const substituteIds = new Set(substitutes.map((s) => s.substituteId));
+
+  // Sub candidates: all anggota except those from this kelompok and those already used as subs
+  const subCandidates = React.useMemo(() => {
+    const q = subSearch.toLowerCase().trim();
+    return allAnggota.filter(
+      (a) =>
+        a.kelompok_id !== kelompokId &&
+        !substituteIds.has(a.id) &&
+        (q === "" ||
+          a.nama.toLowerCase().includes(q) ||
+          (a.kelompok_nama ?? "").toLowerCase().includes(q))
+    );
+  }, [allAnggota, kelompokId, substituteIds, subSearch]);
+
   const handleNext = () => {
     if (step === 1) {
       if (!tanggal) {
@@ -160,18 +295,32 @@ export function BookingStepperDialog({
         return;
       }
     }
-
     if (step === 2 && !selectedSlot) {
       toast.error("Silakan pilih slot waktu.");
       return;
     }
-
     if (step === 3 && selectedKatingIds.size === 0) {
       toast.error("Silakan pilih 1 atau 2 kating pendamping.");
       return;
     }
-
-    setStep((prev) => Math.min(prev + 1, 4));
+    if (step === 4) {
+      // All absent must have a substitute, or user accepts without substitute
+      const absentWithoutSub = absentOriginalIds.filter(
+        (id) => !substitutes.some((s) => s.replacesId === id)
+      );
+      if (absentWithoutSub.length > 0 && anggotaList.length > 0) {
+        const names = anggotaList
+          .filter((a) => absentWithoutSub.includes(a.id))
+          .map((a) => a.nama)
+          .join(", ");
+        toast.warning(
+          `${names} ditandai tidak hadir tanpa pengganti. Lanjutkan?`,
+          { duration: 3000 }
+        );
+        // Allow continuing — it's a warning, not a block
+      }
+    }
+    setStep((prev) => Math.min(prev + 1, 5));
   };
 
   const handleBack = () => {
@@ -194,18 +343,35 @@ export function BookingStepperDialog({
       formData.append("jam_pulang", jamPulang);
       formData.append("tempat_taaruf", tempatTaaruf);
 
+      // Participants data (jika ada anggota)
+      if (anggotaList.length > 0) {
+        formData.append(
+          "participants",
+          JSON.stringify({
+            presentOriginalIds,
+            absentOriginalIds,
+            substitutes: substitutes.map((s) => ({
+              substituteId: s.substituteId,
+              replacesId: s.replacesId,
+            })),
+          })
+        );
+      }
+
       const res = await createBookingAction(formData);
 
       if (res.success && res.data) {
         toast.success("✔ Booking berhasil dibuat!");
         onOpenChange(false);
         onBookingCreated(res.data);
-        // Reset form
+        // Reset all state
         setStep(1);
         setSelectedKatingIds(new Set());
         setCatatan("");
         setJamPulang("16:30");
         setTempatTaaruf("");
+        setAbsentIds(new Set());
+        setSubstitutes([]);
       } else {
         toast.error(`❌ ${res.message}`);
       }
@@ -238,7 +404,7 @@ export function BookingStepperDialog({
   const selectedIkhwan = selectedKatingObjects.filter((k) => k.jenis_kelamin === "L");
   const selectedAkhwat = selectedKatingObjects.filter((k) => k.jenis_kelamin === "P");
 
-  const STEP_LABELS = ["1. Hari", "2. Slot", "3. Kating", "4. Preview"];
+  const STEP_LABELS = ["1. Hari", "2. Slot", "3. Kating", "4. Peserta", "5. Preview"];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -248,7 +414,7 @@ export function BookingStepperDialog({
             <CalendarDays className="size-4 sm:size-5 text-primary shrink-0" /> Booking Sesi Taaruf Baru
           </DialogTitle>
           <DialogDescription className="text-[11px] sm:text-xs">
-            Langkah {step} dari 4: Hari &rarr; Slot &rarr; Kating &rarr; Preview Booking
+            Langkah {step} dari 5: Hari &rarr; Slot &rarr; Kating &rarr; Peserta &rarr; Preview
           </DialogDescription>
         </DialogHeader>
 
@@ -506,8 +672,173 @@ export function BookingStepperDialog({
             </div>
           )}
 
-          {/* STEP 4: BOOKING PREVIEW CARD */}
+          {/* STEP 4: VERIFIKASI PESERTA */}
           {step === 4 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <UserCheck className="size-4 text-primary" /> Verifikasi Kehadiran Anggota
+                </Label>
+                <Badge variant="outline" className="text-[10px]">
+                  {presentOriginalIds.length} hadir · {absentIds.size} tidak hadir
+                </Badge>
+              </div>
+
+              {anggotaList.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground space-y-1">
+                  <Users className="size-7 mx-auto text-muted-foreground/50" />
+                  <p className="font-semibold">Tidak ada data anggota</p>
+                  <p>Silakan tambahkan anggota pada halaman Data Anggota terlebih dahulu.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    Centang anggota yang <strong>tidak hadir</strong>. Semua anggota dianggap hadir secara default.
+                  </p>
+
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {anggotaList.map((a) => {
+                      const isAbsent = absentIds.has(a.id);
+                      const sub = substitutes.find((s) => s.replacesId === a.id);
+                      return (
+                        <div
+                          key={a.id}
+                          className={`rounded-xl border p-3 text-xs transition-all ${
+                            isAbsent
+                              ? "border-rose-500/40 bg-rose-500/5"
+                              : "border-border bg-muted/10"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => toggleAbsent(a)}
+                                className={`size-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                  isAbsent
+                                    ? "border-rose-500 bg-rose-500 text-white"
+                                    : "border-emerald-500 bg-emerald-500/10 text-emerald-600"
+                                }`}
+                                title={isAbsent ? "Tandai hadir" : "Tandai tidak hadir"}
+                              >
+                                {isAbsent ? (
+                                  <X className="size-3" />
+                                ) : (
+                                  <CheckCircle2 className="size-3" />
+                                )}
+                              </button>
+                              <span className={`font-semibold truncate ${isAbsent ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                                {a.nama}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className={`text-[9px] shrink-0 ${a.jenis_kelamin === "L" ? "text-primary" : "text-emerald-600"}`}
+                              >
+                                {a.jenis_kelamin === "L" ? "Ikhwan" : "Akhwat"}
+                              </Badge>
+                            </div>
+
+                            {isAbsent && !sub && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] px-2 text-amber-600 border-amber-500/40 hover:bg-amber-500/10 shrink-0"
+                                onClick={() => { setSubPickerFor(a); setSubSearch(""); }}
+                              >
+                                <UserPlus className="size-3 mr-1" /> Pengganti
+                              </Button>
+                            )}
+
+                            {isAbsent && sub && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[10px] text-amber-600 font-semibold">
+                                  → {sub.substituteName}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeSubstitute(a.id)}
+                                  className="text-muted-foreground hover:text-rose-600"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Substitute Picker Panel */}
+                  {subPickerFor && (
+                    <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3 space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                          <UserMinus className="size-3.5" />
+                          Pilih pengganti untuk <strong>{subPickerFor.nama}</strong>
+                        </p>
+                        <button type="button" onClick={() => { setSubPickerFor(null); setSubSearch(""); }}>
+                          <X className="size-4 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </div>
+
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-2 size-3 text-muted-foreground" />
+                        <Input
+                          autoFocus
+                          placeholder="Cari nama atau kelompok lain..."
+                          value={subSearch}
+                          onChange={(e) => setSubSearch(e.target.value)}
+                          className="pl-7 text-xs h-7"
+                        />
+                      </div>
+
+                      {isLoadingAnggota ? (
+                        <p className="text-[11px] text-muted-foreground text-center py-2">Memuat...</p>
+                      ) : subCandidates.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground text-center py-2">
+                          Tidak ada kandidat pengganti.
+                        </p>
+                      ) : (
+                        <div className="max-h-32 overflow-y-auto space-y-1">
+                          {subCandidates.slice(0, 20).map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => addSubstitute(c)}
+                              className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-amber-500/10 text-xs flex items-center justify-between transition-colors"
+                            >
+                              <span className="font-semibold">{c.nama}</span>
+                              <span className="text-[10px] text-muted-foreground">{c.kelompok_nama}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {substitutes.length > 0 && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-1.5">
+                      <p className="font-semibold text-amber-700 dark:text-amber-400">
+                        🔄 Substitusi ({substitutes.length}):
+                      </p>
+                      {substitutes.map((s) => (
+                        <div key={s.replacesId} className="flex items-center gap-2 text-[11px]">
+                          <span className="text-muted-foreground line-through">{s.replacesName}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-semibold text-amber-700 dark:text-amber-300">{s.substituteName}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* STEP 5: BOOKING PREVIEW CARD */}
+          {step === 5 && (
             <div className="space-y-4">
               <Card className="glass-card border-primary/20">
                 <CardHeader className="py-3 px-4 bg-primary/5 border-b flex flex-row items-center justify-between">
@@ -565,22 +896,140 @@ export function BookingStepperDialog({
                     </div>
                   </div>
 
-                  {/* Anggota Hadir List Preview */}
+                  {/* Peserta Final */}
                   <div className="space-y-1.5 pt-1 border-t">
                     <span className="text-muted-foreground block text-[11px] font-semibold">
-                      Anggota Peserta Kelompok:
+                      Peserta Sesi ({presentOriginalIds.length + substitutes.length} hadir):
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {anggotaList.length === 0 ? (
                         <span className="text-muted-foreground text-[11px]">Seluruh Anggota Kelompok</span>
                       ) : (
-                        anggotaList.map((a) => (
-                          <Badge key={a.id} variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                            ✔ {a.nama}
-                          </Badge>
-                        ))
+                        <>
+                          {anggotaList
+                            .filter((a) => !absentIds.has(a.id))
+                            .map((a) => (
+                              <Badge
+                                key={a.id}
+                                variant="secondary"
+                                className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                              >
+                                ✔ {a.nama}
+                              </Badge>
+                            ))}
+                          {anggotaList
+                            .filter((a) => absentIds.has(a.id) && !substitutes.some((s) => s.replacesId === a.id))
+                            .map((a) => (
+                              <Badge
+                                key={a.id}
+                                variant="secondary"
+                                className="text-[10px] bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                              >
+                                ✗ {a.nama}
+                              </Badge>
+                            ))}
+                          {substitutes.map((s) => (
+                            <Badge
+                              key={s.substituteId}
+                              variant="secondary"
+                              className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                            >
+                              🔄 {s.substituteName} <span className="opacity-60">(ganti {s.replacesName})</span>
+                            </Badge>
+                          ))}
+                        </>
                       )}
                     </div>
+                  </div>
+
+                  {/* Estimasi Progress Peserta Section */}
+                  <div className="rounded-xl border border-border bg-card/60 p-3 space-y-2.5 mt-2">
+                    <div className="flex items-center justify-between border-b pb-1.5">
+                      <span className="text-xs font-bold flex items-center gap-1.5 text-foreground">
+                        <TrendingUp className="size-3.5 text-primary" /> Estimasi Progress Peserta
+                      </span>
+                      {estimateResult && (
+                        <Badge variant="outline" className="text-[10px]">
+                          {estimateResult.totalParticipants} Peserta
+                        </Badge>
+                      )}
+                    </div>
+
+                    {isLoadingEstimate ? (
+                      <p className="text-[11px] text-muted-foreground italic py-2 text-center">
+                        Memeriksa riwayat taaruf peserta dengan kating terpilih...
+                      </p>
+                    ) : !estimateResult || estimateResult.totalParticipants === 0 ? (
+                      <p className="text-[11px] text-muted-foreground py-1 text-center">
+                        Tidak ada data peserta untuk dihitung.
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5 text-xs">
+                        {/* 🟢 Akan Bertambah */}
+                        <div className="space-y-1">
+                          <p className="font-semibold text-emerald-600 dark:text-emerald-400 text-[11px]">
+                            🟢 Akan Bertambah (+1) ({estimateResult.willIncreaseList.length})
+                          </p>
+                          {estimateResult.willIncreaseList.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground pl-3 italic">Tidak ada</p>
+                          ) : (
+                            <ul className="space-y-0.5 pl-3">
+                              {estimateResult.willIncreaseList.map((p) => (
+                                <li key={p.anggotaId} className="flex items-center gap-1.5 text-[11px]">
+                                  <span>•</span>
+                                  <span className="font-medium text-foreground">{p.nama}</span>
+                                  {p.isSubstitute && (
+                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                                      ganti {p.replacesNama}
+                                    </Badge>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {/* 🟡 Sudah Pernah Bertemu Kating Ini */}
+                        <div className="space-y-1 pt-1.5 border-t border-border/40">
+                          <p className="font-semibold text-amber-600 dark:text-amber-400 text-[11px]">
+                            🟡 Sudah Pernah Bertemu Kating Ini (Progress Tidak Bertambah) ({estimateResult.alreadyMetList.length})
+                          </p>
+                          {estimateResult.alreadyMetList.length === 0 ? (
+                            <p className="text-[11px] text-muted-foreground pl-3 italic">Tidak ada</p>
+                          ) : (
+                            <ul className="space-y-0.5 pl-3">
+                              {estimateResult.alreadyMetList.map((p) => (
+                                <li key={p.anggotaId} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                  <span>•</span>
+                                  <span className="font-medium text-foreground">{p.nama}</span>
+                                  {p.isSubstitute && (
+                                    <Badge variant="secondary" className="text-[9px] px-1 py-0 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                                      ganti {p.replacesNama}
+                                    </Badge>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        {/* Ringkasan Footer */}
+                        <div className="pt-2 border-t border-border/60 text-[10px] bg-muted/40 rounded-lg p-2 grid grid-cols-3 gap-1 text-center font-medium">
+                          <div>
+                            <span className="text-muted-foreground block text-[9px]">Total Peserta</span>
+                            <span className="font-bold text-foreground text-xs">{estimateResult.totalParticipants}</span>
+                          </div>
+                          <div>
+                            <span className="text-emerald-600 dark:text-emerald-400 block text-[9px]">Progress Bertambah</span>
+                            <span className="font-bold text-emerald-700 dark:text-emerald-300 text-xs">{estimateResult.totalIncrease}</span>
+                          </div>
+                          <div>
+                            <span className="text-amber-600 dark:text-amber-400 block text-[9px]">Progress Tetap</span>
+                            <span className="font-bold text-amber-700 dark:text-amber-300 text-xs">{estimateResult.totalUnchanged}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* WA Template Preview */}
@@ -624,7 +1073,7 @@ export function BookingStepperDialog({
             <ChevronLeft className="mr-1 size-3.5" /> Kembali
           </Button>
 
-          {step < 4 ? (
+          {step < 5 ? (
             <Button
               type="button"
               size="sm"

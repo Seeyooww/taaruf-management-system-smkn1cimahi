@@ -33,6 +33,7 @@ export async function createBookingAction(formData: FormData) {
   const catatan = String(formData.get("catatan") || "").trim();
   const jam_pulang = String(formData.get("jam_pulang") || "").trim();
   const tempat_taaruf = String(formData.get("tempat_taaruf") || "").trim();
+  const participantsRaw = formData.get("participants");
 
   if (!kelompok_id || !tanggal || !slot_id) {
     return {
@@ -48,6 +49,21 @@ export async function createBookingAction(formData: FormData) {
     };
   }
 
+  let participants: {
+    presentOriginalIds: string[];
+    absentOriginalIds: string[];
+    substitutes: { substituteId: string; replacesId: string }[];
+  } | undefined;
+
+  if (participantsRaw) {
+    try {
+      participants = JSON.parse(String(participantsRaw));
+    } catch {
+      // Non-fatal: ignore malformed JSON, booking proceeds without participants
+      console.warn("[createBookingAction] Failed to parse participants JSON");
+    }
+  }
+
   const result = await createBooking({
     kelompok_id,
     tanggal,
@@ -56,6 +72,7 @@ export async function createBookingAction(formData: FormData) {
     catatan,
     jam_pulang: jam_pulang || null,
     tempat_taaruf: tempat_taaruf || null,
+    participants,
   });
 
   if (result.success) {

@@ -16,7 +16,7 @@ export function BreadcrumbList({
   ...props
 }: React.OlHTMLAttributes<HTMLOListElement>) {
   return (
-    <ol className={cn("flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400", className)} {...props} />
+    <ol className={cn("flex items-center gap-2 text-sm text-muted-foreground", className)} {...props} />
   );
 }
 
@@ -35,7 +35,7 @@ export function BreadcrumbLink({
   return (
     <Link
       href={href}
-      className={cn("transition hover:text-zinc-950 dark:hover:text-white", className)}
+      className={cn("transition hover:text-foreground", className)}
       {...props}
     />
   );
@@ -45,7 +45,7 @@ export function BreadcrumbPage({
   className,
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) {
-  return <span className={cn("font-medium text-zinc-950 dark:text-white", className)} {...props} />;
+  return <span className={cn("font-medium text-foreground", className)} {...props} />;
 }
 
 export function BreadcrumbSeparator({
@@ -53,7 +53,7 @@ export function BreadcrumbSeparator({
   ...props
 }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
-    <span aria-hidden className={cn("text-zinc-400", className)} {...props}>
+    <span aria-hidden className={cn("text-muted-foreground/60", className)} {...props}>
       <ChevronRight className="size-4" />
     </span>
   );

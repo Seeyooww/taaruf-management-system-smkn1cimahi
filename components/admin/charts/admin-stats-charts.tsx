@@ -89,8 +89,8 @@ export function AdminStatsCharts({ data }: AdminStatsChartsProps) {
                       >
                         {/* Tooltip */}
                         {hoveredIndex === idx && (
-                          <div className="absolute -top-10 z-20 px-2.5 py-1 rounded bg-slate-900 text-white text-[11px] font-medium shadow-md animate-in fade-in zoom-in-95">
-                            {item.label}: <span className="font-bold text-blue-400">{item.count} booking</span>
+                          <div className="absolute -top-10 z-20 px-2.5 py-1 rounded bg-popover text-popover-foreground border border-border text-[11px] font-medium shadow-md animate-in fade-in zoom-in-95">
+                            {item.label}: <span className="font-bold text-primary">{item.count} booking</span>
                           </div>
                         )}
 

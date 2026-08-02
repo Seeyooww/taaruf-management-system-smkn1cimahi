@@ -189,3 +189,19 @@ export interface AnggotaProgressSummary {
   kating_met_list: MetKatingDetail[];
   substitution_history?: SubstitutionRecord[];
 }
+
+export interface ParticipantEstimateItem {
+  anggotaId: string;
+  nama: string;
+  isSubstitute?: boolean;
+  replacesNama?: string;
+  alreadyMetCount?: number;
+}
+
+export interface ProgressEstimateResult {
+  willIncreaseList: ParticipantEstimateItem[];
+  alreadyMetList: ParticipantEstimateItem[];
+  totalParticipants: number;
+  totalIncrease: number;
+  totalUnchanged: number;
+}

@@ -1,10 +1,11 @@
 "use server";
 
 import {
+  checkProgressEstimate,
   fetchAnggotaProgressSummaries,
   saveBookingProgress,
 } from "@/services/progress.service";
-import type { SubstituteEntry } from "@/types/database";
+import type { ParticipantEstimateItem, SubstituteEntry } from "@/types/database";
 
 export async function getAnggotaProgressAction(kelompokId?: string) {
   return await fetchAnggotaProgressSummaries(kelompokId);
@@ -26,4 +27,21 @@ export async function calculateBookingProgressAction(
   }
 
   return await saveBookingProgress(bookingId, presentOriginalIds, absentOriginalIds, substitutes);
+}
+
+export async function checkProgressEstimateAction(
+  participants: ParticipantEstimateItem[],
+  katingIds: string[]
+) {
+  if (!participants || participants.length === 0 || !katingIds || katingIds.length === 0) {
+    return {
+      willIncreaseList: [],
+      alreadyMetList: [],
+      totalParticipants: 0,
+      totalIncrease: 0,
+      totalUnchanged: 0,
+    };
+  }
+
+  return await checkProgressEstimate(participants, katingIds);
 }

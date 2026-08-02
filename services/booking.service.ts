@@ -146,6 +146,11 @@ export async function createBooking(data: {
   catatan?: string;
   jam_pulang?: string | null;
   tempat_taaruf?: string | null;
+  participants?: {
+    presentOriginalIds: string[];
+    absentOriginalIds: string[];
+    substitutes: { substituteId: string; replacesId: string }[];
+  };
 }) {
   const settings = await fetchEventSettings();
   const bookingDate = new Date(data.tanggal);
@@ -232,6 +237,45 @@ export async function createBooking(data: {
         success: false,
         message: `Gagal menyimpan relasi kating: ${bkError.message}`,
       };
+    }
+
+    // ── Optional: batch insert booking_participants (jika dikirim saat booking) ──
+    if (data.participants) {
+      const { presentOriginalIds, absentOriginalIds, substitutes } = data.participants;
+      const participantRows = [
+        ...presentOriginalIds.map((anggotaId) => ({
+          booking_id: created.id,
+          anggota_id: anggotaId,
+          hadir: true,
+          is_substitute: false,
+          replaces_anggota_id: null as string | null,
+        })),
+        ...absentOriginalIds.map((anggotaId) => ({
+          booking_id: created.id,
+          anggota_id: anggotaId,
+          hadir: false,
+          is_substitute: false,
+          replaces_anggota_id: null as string | null,
+        })),
+        ...substitutes.map((sub) => ({
+          booking_id: created.id,
+          anggota_id: sub.substituteId,
+          hadir: true,
+          is_substitute: true,
+          replaces_anggota_id: sub.replacesId,
+        })),
+      ];
+
+      if (participantRows.length > 0) {
+        const { error: participantError } = await supabase
+          .from("booking_participants")
+          .insert(participantRows);
+
+        if (participantError) {
+          console.error("[createBooking] booking_participants insert error:", participantError.message);
+          // Non-fatal: booking and kating are saved; log only
+        }
+      }
     }
 
     // Return full booking with kating_list
