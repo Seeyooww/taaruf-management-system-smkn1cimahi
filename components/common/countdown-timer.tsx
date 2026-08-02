@@ -3,8 +3,8 @@
 import * as React from "react";
 import { Clock, Hourglass, PartyPopper } from "lucide-react";
 
-// Target waktu: Senin 4 Agustus 2026 07:00 WIB (UTC+7)
-const EVENT_START = new Date("2026-08-04T07:00:00+07:00");
+// Target waktu: Senin 3 Agustus 2026 00:00 WIB (UTC+7)
+const EVENT_START = new Date("2026-08-03T00:00:00+07:00");
 // Target akhir: Jumat 8 Agustus 2026 17:00 WIB
 const EVENT_END = new Date("2026-08-08T17:00:00+07:00");
 
@@ -119,7 +119,7 @@ export function CountdownTimer() {
       {/* Sub-label */}
       <p className="text-[11px] text-muted-foreground">
         {isBefore
-          ? "Senin, 4 Agustus 2026 · 07:00 WIB · SMKN 1 Cimahi"
+          ? "Senin, 3 Agustus 2026 · 00:00 WIB · SMKN 1 Cimahi"
           : "Jumat, 8 Agustus 2026 · 17:00 WIB · SMKN 1 Cimahi"}
       </p>
     </div>
