@@ -8,8 +8,10 @@ import {
   Clock,
   Edit,
   MapPin,
+  Plus,
   Search,
   Shield,
+  TrendingUp,
   UserPlus,
   Users,
   X,
@@ -35,13 +37,24 @@ import {
   updateBookingDetailsAction,
 } from "@/services/booking.actions";
 import { getAnggotaAction } from "@/services/anggota.actions";
+import { checkProgressEstimateAction } from "@/services/progress.actions";
 import type {
   Anggota,
   BookingWithDetails,
   EventSettings,
   Kating,
+  ParticipantEstimateItem,
+  ProgressEstimateResult,
   SlotWaktu,
 } from "@/types/database";
+
+export interface SubstituteItem {
+  substituteId: string;
+  nama: string;
+  kelompokNama?: string;
+  replacesId: string | null;
+  replacesNama?: string;
+}
 
 interface EditBookingDialogProps {
   open: boolean;
@@ -64,7 +77,7 @@ export function EditBookingDialog({
 }: EditBookingDialogProps) {
   const [isPending, startTransition] = React.useTransition();
 
-  // ── Booking Fields ──────────────────────────────────────────────────────────
+  // ── Booking Detail Fields ───────────────────────────────────────────────────
   const [tanggal, setTanggal] = React.useState("");
   const [selectedSlot, setSelectedSlot] = React.useState<SlotWaktu | null>(null);
   const [selectedKatingIds, setSelectedKatingIds] = React.useState<Set<string>>(new Set());
@@ -77,25 +90,32 @@ export function EditBookingDialog({
   const [searchKating, setSearchKating] = React.useState("");
   const [conflictWarning, setConflictWarning] = React.useState<string | null>(null);
 
-  // ── Participant Fields ──────────────────────────────────────────────────────
-  // Set of anggota IDs that are PRESENT (original members)
+  // ── Participant Management State ────────────────────────────────────────────
+  // Original member IDs present
   const [presentIds, setPresentIds] = React.useState<Set<string>>(new Set());
-  // Map: absent anggota ID -> substitute Anggota (or null if not chosen yet)
-  const [substituteMap, setSubstituteMap] = React.useState<Map<string, Anggota | null>>(new Map());
-  const [searchingForId, setSearchingForId] = React.useState<string | null>(null);
+  // Original member IDs absent
+  const [absentIds, setAbsentIds] = React.useState<Set<string>>(new Set());
+  // Substitutes array (flexible, non-group members)
+  const [substitutes, setSubstitutes] = React.useState<SubstituteItem[]>([]);
+
+  // Search candidate substitute
+  const [isAddingSubstitute, setIsAddingSubstitute] = React.useState(false);
   const [searchSubQuery, setSearchSubQuery] = React.useState("");
   const [allAnggotaList, setAllAnggotaList] = React.useState<Anggota[]>([]);
   const [isLoadingAnggota, setIsLoadingAnggota] = React.useState(false);
 
+  // Real-time Progress Estimate
+  const [estimateResult, setEstimateResult] = React.useState<ProgressEstimateResult | null>(null);
+  const [isLoadingEstimate, setIsLoadingEstimate] = React.useState(false);
+
   // Active tab: "booking" | "peserta"
   const [activeTab, setActiveTab] = React.useState<"booking" | "peserta">("booking");
 
-  // The kelompok's own active anggota
   const aktifAnggota = React.useMemo(() => {
     return anggotaList.filter((a) => a.aktif);
   }, [anggotaList]);
 
-  // ── Initialize form state ────────────────────────────────────────────────────
+  // ── Initialize Form & Fetch Booking Participants from DB ────────────────────
   React.useEffect(() => {
     if (booking && open) {
       setTanggal(booking.tanggal || settings.tanggal_mulai || "");
@@ -108,55 +128,60 @@ export function EditBookingDialog({
       setConflictWarning(null);
       setSearchKating("");
       setActiveTab("booking");
-      setSearchingForId(null);
+      setIsAddingSubstitute(false);
       setSearchSubQuery("");
 
-      // Default: all active members as present, no substitutes yet
-      const defaultIds = new Set(aktifAnggota.map((a) => a.id));
-      setPresentIds(defaultIds);
-      setSubstituteMap(new Map());
+      // Default: active members present
+      const defaultPresent = new Set(aktifAnggota.map((a) => a.id));
+      setPresentIds(defaultPresent);
+      setAbsentIds(new Set());
+      setSubstitutes([]);
 
-      // Load persisted participants if any
+      // Fetch booking_participants directly from DB (Single Source of Truth)
       if (booking.id) {
         getBookingParticipantsAction(booking.id).then((rows) => {
           if (rows && rows.length > 0) {
             const pres = new Set<string>();
-            const subMap = new Map<string, Anggota | null>();
+            const abs = new Set<string>();
+            const subs: SubstituteItem[] = [];
 
-            // First pass – find who is absent (original members with hadir=false)
-            const absentIds = new Set<string>();
+            // Accounted member IDs from DB rows
+            const accountedOriginalIds = new Set<string>();
+
             for (const r of rows) {
-              if (!r.is_substitute && !r.hadir) {
-                absentIds.add(r.anggota_id);
-              }
-            }
-
-            // Build presentIds from active kelompok members
-            for (const a of aktifAnggota) {
-              if (!absentIds.has(a.id)) {
-                pres.add(a.id);
+              if (r.is_substitute) {
+                const subAnggota = r.anggota as { nama?: string; kelompok_nama?: string } | undefined;
+                subs.push({
+                  substituteId: r.anggota_id,
+                  nama: subAnggota?.nama ?? r.anggota_nama,
+                  kelompokNama: subAnggota?.kelompok_nama ?? "Kelompok Lain",
+                  replacesId: r.replaces_anggota_id || null,
+                  replacesNama: r.replaces_nama ?? undefined,
+                });
+              } else if (r.hadir) {
+                pres.add(r.anggota_id);
+                accountedOriginalIds.add(r.anggota_id);
               } else {
-                subMap.set(a.id, null); // absent, substitute unknown yet
+                abs.add(r.anggota_id);
+                accountedOriginalIds.add(r.anggota_id);
               }
             }
 
-            // Fill in known substitutes
-            for (const r of rows) {
-              if (r.is_substitute && r.replaces_anggota_id) {
-                const subAnggota = anggotaList.find((a) => a.id === r.anggota_id);
-                if (subAnggota) {
-                  subMap.set(r.replaces_anggota_id, subAnggota);
-                }
+            // Ensure any active group member not in DB rows defaults to present
+            for (const a of aktifAnggota) {
+              if (!accountedOriginalIds.has(a.id)) {
+                pres.add(a.id);
               }
             }
 
             setPresentIds(pres);
-            setSubstituteMap(subMap);
+            setAbsentIds(abs);
+            setSubstitutes(subs);
           }
-        }).catch(() => { /* silently ignore */ });
+        }).catch(() => { /* ignore error */ });
       }
 
-      // Load all anggota for substitute picker
+      // Load all anggota for substitute autocomplete
       if (allAnggotaList.length === 0) {
         setIsLoadingAnggota(true);
         getAnggotaAction()
@@ -165,9 +190,42 @@ export function EditBookingDialog({
           .finally(() => setIsLoadingAnggota(false));
       }
     }
-  }, [booking, open, settings.tanggal_mulai, slotList, aktifAnggota, anggotaList, allAnggotaList.length, booking?.id]);
+  }, [booking, open, settings.tanggal_mulai, slotList, aktifAnggota, allAnggotaList.length, booking?.id]);
 
-  // ── Kating availability ──────────────────────────────────────────────────────
+  // ── Compute Real-Time Progress Estimate ──────────────────────────────────────
+  React.useEffect(() => {
+    if (open && selectedKatingIds.size > 0) {
+      const presentOriginals = aktifAnggota.filter((a) => presentIds.has(a.id));
+      const finalParticipants: ParticipantEstimateItem[] = [
+        ...presentOriginals.map((a) => ({ anggotaId: a.id, nama: a.nama })),
+        ...substitutes.map((s) => {
+          const replacedObj = aktifAnggota.find((a) => a.id === s.replacesId);
+          return {
+            anggotaId: s.substituteId,
+            nama: s.nama,
+            isSubstitute: true,
+            replacesNama: replacedObj?.nama ?? s.replacesNama ?? "Anggota",
+          };
+        }),
+      ];
+
+      const katingIds = Array.from(selectedKatingIds);
+
+      if (finalParticipants.length > 0 && katingIds.length > 0) {
+        setIsLoadingEstimate(true);
+        checkProgressEstimateAction(finalParticipants, katingIds)
+          .then((res) => setEstimateResult(res))
+          .catch(() => setEstimateResult(null))
+          .finally(() => setIsLoadingEstimate(false));
+      } else {
+        setEstimateResult(null);
+      }
+    } else {
+      setEstimateResult(null);
+    }
+  }, [open, selectedKatingIds, presentIds, substitutes, aktifAnggota]);
+
+  // ── Kating Availability ─────────────────────────────────────────────────────
   const loadAvailableKating = React.useCallback(async () => {
     if (!tanggal || !selectedSlot || !booking) return;
     setIsLoadingKating(true);
@@ -176,7 +234,6 @@ export function EditBookingDialog({
       const katingList = await getAvailableKatingAction(tanggal, selectedSlot.id, booking.id);
       setAllKatingList(katingList);
 
-      // Deselect any kating no longer available
       const availableIds = new Set(katingList.map((k) => k.id));
       setSelectedKatingIds((prev) => {
         const conflictedNames: string[] = [];
@@ -213,7 +270,7 @@ export function EditBookingDialog({
 
   const isPulangSlot = Boolean(selectedSlot?.nama_slot.toLowerCase().includes("pulang"));
 
-  // ── Kating helpers ───────────────────────────────────────────────────────────
+  // ── Kating Select Helper ────────────────────────────────────────────────────
   const toggleKating = (kat: Kating) => {
     setSelectedKatingIds((prev) => {
       const next = new Set(prev);
@@ -240,56 +297,32 @@ export function EditBookingDialog({
   const akhwatList = filteredKatingList.filter((k) => k.jenis_kelamin === "P");
   const selectedKatingObjects = allKatingList.filter((k) => selectedKatingIds.has(k.id));
 
-  // ── Participant helpers ──────────────────────────────────────────────────────
+  // ── Original Member Attendance Helper ─────────────────────────────────────
   const togglePresent = (memberId: string) => {
     setPresentIds((prev) => {
       const next = new Set(prev);
       if (next.has(memberId)) {
         next.delete(memberId);
-        setSubstituteMap((sm) => {
-          const nsm = new Map(sm);
-          nsm.set(memberId, null);
-          return nsm;
-        });
+        setAbsentIds((abs) => new Set(abs).add(memberId));
       } else {
         next.add(memberId);
-        setSubstituteMap((sm) => {
-          const nsm = new Map(sm);
-          nsm.delete(memberId);
-          return nsm;
+        setAbsentIds((abs) => {
+          const n = new Set(abs);
+          n.delete(memberId);
+          return n;
         });
-        if (searchingForId === memberId) setSearchingForId(null);
       }
       return next;
     });
   };
 
-  const selectSubstitute = (absentId: string, candidate: Anggota) => {
-    setSubstituteMap((prev) => {
-      const next = new Map(prev);
-      next.set(absentId, candidate);
-      return next;
-    });
-    setSearchingForId(null);
-    setSearchSubQuery("");
-  };
-
-  const removeSubstitute = (absentId: string) => {
-    setSubstituteMap((prev) => {
-      const next = new Map(prev);
-      next.set(absentId, null);
-      return next;
-    });
-  };
-
-  const alreadyChosenSubstituteIds = new Set(
-    [...substituteMap.values()].filter(Boolean).map((a) => a!.id)
-  );
+  // ── Substitute Candidates Rules (Flexible, non-group) ──────────────────────
+  const chosenSubstituteIds = new Set(substitutes.map((s) => s.substituteId));
 
   const substituteCandidates = allAnggotaList.filter((a) => {
-    if (a.kelompok_id === booking.kelompok_id) return false;
-    if (alreadyChosenSubstituteIds.has(a.id)) return false;
-    if (presentIds.has(a.id)) return false;
+    if (a.kelompok_id === booking.kelompok_id) return false; // not group member
+    if (chosenSubstituteIds.has(a.id)) return false; // no duplicate substitutes
+    if (presentIds.has(a.id)) return false; // not present original
     if (!searchSubQuery.trim()) return true;
     const q = searchSubQuery.toLowerCase();
     return (
@@ -298,9 +331,47 @@ export function EditBookingDialog({
     );
   });
 
-  const totalHadir = presentIds.size + [...substituteMap.values()].filter(Boolean).length;
+  const addSubstitute = (candidate: Anggota) => {
+    const firstAbsentId = Array.from(absentIds)[0] || null;
+    const firstAbsentObj = aktifAnggota.find((a) => a.id === firstAbsentId);
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+    setSubstitutes((prev) => [
+      ...prev,
+      {
+        substituteId: candidate.id,
+        nama: candidate.nama,
+        kelompokNama: candidate.kelompok_nama ?? "Kelompok Lain",
+        replacesId: firstAbsentId,
+        replacesNama: firstAbsentObj?.nama,
+      },
+    ]);
+    setIsAddingSubstitute(false);
+    setSearchSubQuery("");
+  };
+
+  const removeSubstitute = (substituteId: string) => {
+    setSubstitutes((prev) => prev.filter((s) => s.substituteId !== substituteId));
+  };
+
+  const updateSubstituteReplaces = (substituteId: string, replacesId: string | null) => {
+    setSubstitutes((prev) =>
+      prev.map((s) => {
+        if (s.substituteId === substituteId) {
+          const replacedObj = aktifAnggota.find((a) => a.id === replacesId);
+          return {
+            ...s,
+            replacesId,
+            replacesNama: replacedObj?.nama,
+          };
+        }
+        return s;
+      })
+    );
+  };
+
+  const totalHadir = presentIds.size + substitutes.length;
+
+  // ── Submit Edit ─────────────────────────────────────────────────────────────
   const handleSubmitEdit = () => {
     if (!tanggal || !selectedSlot) {
       toast.error("Silakan pilih tanggal dan slot waktu.");
@@ -308,6 +379,10 @@ export function EditBookingDialog({
     }
     if (selectedKatingIds.size === 0) {
       toast.error("Silakan pilih minimal 1 kating pendamping.");
+      return;
+    }
+    if (totalHadir === 0) {
+      toast.error("Silakan pilih minimal 1 peserta yang hadir (asli atau pengganti).");
       return;
     }
 
@@ -321,14 +396,12 @@ export function EditBookingDialog({
       formData.append("jam_pulang", jamPulang);
       formData.append("tempat_taaruf", tempatTaaruf);
 
-      // Participants
-      const presentOriginalIds = Array.from(presentIds);
-      const absentOriginalIds = [...substituteMap.keys()];
-      presentOriginalIds.forEach((id) => formData.append("present_ids", id));
-      absentOriginalIds.forEach((id) => formData.append("absent_ids", id));
-      for (const [absentId, sub] of substituteMap.entries()) {
-        if (sub) formData.append("substitutes", `${sub.id}:${absentId}`);
-      }
+      // Participants data
+      Array.from(presentIds).forEach((id) => formData.append("present_ids", id));
+      Array.from(absentIds).forEach((id) => formData.append("absent_ids", id));
+      substitutes.forEach((sub) => {
+        formData.append("substitutes", `${sub.substituteId}:${sub.replacesId || ""}`);
+      });
 
       const res = await updateBookingDetailsAction(formData);
 
@@ -350,7 +423,7 @@ export function EditBookingDialog({
             <Edit className="size-4 sm:size-5" /> Ubah Booking Sesi Taaruf
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Ubah detail pengajuan booking (Status: <strong>Menunggu Konfirmasi</strong>). ID dan riwayat booking tetap terjaga.
+            Ubah detail pengajuan booking (Status: <strong>Menunggu Konfirmasi</strong>). Single Source of Truth dari <code>booking_participants</code>.
           </DialogDescription>
         </DialogHeader>
 
@@ -377,18 +450,22 @@ export function EditBookingDialog({
           <button
             type="button"
             onClick={() => setActiveTab("peserta")}
-            className={`flex-1 text-xs font-semibold rounded-md py-1.5 transition-all flex items-center justify-center gap-1 ${
+            className={`flex-1 text-xs font-semibold rounded-md py-1.5 transition-all flex items-center justify-center gap-1.5 ${
               activeTab === "peserta"
                 ? "bg-background shadow text-primary"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            👥 Peserta
-            <Badge variant="outline" className="text-[9px] h-4 px-1">{totalHadir} Hadir</Badge>
+            👥 Peserta ({totalHadir} Hadir)
+            {substitutes.length > 0 && (
+              <Badge variant="warning" className="text-[9px] h-4 px-1">
+                +{substitutes.length} Pengganti
+              </Badge>
+            )}
           </button>
         </div>
 
-        {/* ── TAB: BOOKING ─────────────────────────────────────────────────── */}
+        {/* ── TAB 1: DETAIL BOOKING ─────────────────────────────────────────── */}
         {activeTab === "booking" && (
           <div className="space-y-4 py-1 text-xs animate-in fade-in">
             {/* Tanggal & Slot */}
@@ -490,7 +567,7 @@ export function EditBookingDialog({
                   Tidak ada kating yang tersedia pada tanggal dan slot ini.
                 </p>
               ) : (
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-44 overflow-y-auto pr-1">
                   {ikhwanList.length > 0 && (
                     <div className="space-y-1">
                       <p className="text-[10px] font-bold text-primary uppercase">Ikhwan</p>
@@ -590,46 +667,47 @@ export function EditBookingDialog({
           </div>
         )}
 
-        {/* ── TAB: PESERTA ─────────────────────────────────────────────────── */}
+        {/* ── TAB 2: MANAJEMEN PESERTA FLEKSIBEL ─────────────────────────────── */}
         {activeTab === "peserta" && (
-          <div className="space-y-3 py-1 text-xs animate-in fade-in">
+          <div className="space-y-4 py-1 text-xs animate-in fade-in">
+            {/* Header info */}
             <div className="rounded-lg bg-muted/40 border px-3 py-2 text-xs flex items-center justify-between">
-              <span className="font-semibold">Daftar Peserta Kelompok ({aktifAnggota.length})</span>
-              <span className="text-primary font-bold">Total Hadir: {totalHadir}</span>
+              <span className="font-semibold text-foreground">Status Kehadiran Peserta</span>
+              <span className="text-primary font-bold">Total Hadir: {totalHadir} Peserta</span>
             </div>
 
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {aktifAnggota.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground flex flex-col items-center gap-2">
-                  <Users className="size-8 opacity-40" />
-                  <span>Belum ada data anggota untuk kelompok ini.</span>
-                </div>
-              ) : (
-                aktifAnggota.map((member) => {
-                  const isPresent = presentIds.has(member.id);
-                  const isAbsent = substituteMap.has(member.id);
-                  const chosenSub = substituteMap.get(member.id) ?? null;
-                  const isSearchingThis = searchingForId === member.id;
+            {/* Section A: Anggota Kelompok Asli */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                <span>1. Anggota Kelompok Asli ({aktifAnggota.length})</span>
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {presentIds.size} Centang Hadir
+                </span>
+              </Label>
 
-                  return (
-                    <div
-                      key={member.id}
-                      className={`rounded-lg border text-xs transition-all overflow-hidden ${
-                        isPresent
-                          ? "border-emerald-500/30 bg-emerald-500/5"
-                          : "border-rose-500/30 bg-rose-500/5"
-                      }`}
-                    >
-                      {/* Member Row */}
-                      <div className="flex items-center justify-between p-2.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {aktifAnggota.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-2">Belum ada anggota kelompok.</p>
+                ) : (
+                  aktifAnggota.map((member) => {
+                    const isPresent = presentIds.has(member.id);
+                    return (
+                      <div
+                        key={member.id}
+                        className={`flex items-center justify-between p-2 rounded-lg border text-xs transition-all ${
+                          isPresent
+                            ? "border-emerald-500/30 bg-emerald-500/5"
+                            : "border-rose-500/30 bg-rose-500/5 opacity-70"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
                           <Checkbox
-                            id={`edit-check-${member.id}`}
+                            id={`edit-member-${member.id}`}
                             checked={isPresent}
                             onCheckedChange={() => togglePresent(member.id)}
                           />
                           <label
-                            htmlFor={`edit-check-${member.id}`}
+                            htmlFor={`edit-member-${member.id}`}
                             className={`font-semibold cursor-pointer truncate ${
                               !isPresent ? "line-through text-muted-foreground" : "text-foreground"
                             }`}
@@ -643,109 +721,210 @@ export function EditBookingDialog({
                         {isPresent ? (
                           <Badge variant="success" className="text-[10px]">Hadir</Badge>
                         ) : (
-                          <Badge variant="destructive" className="text-[10px]">Tidak Hadir</Badge>
+                          <Badge variant="destructive" className="text-[10px]">Absen</Badge>
                         )}
                       </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
 
-                      {/* Substitute Panel */}
-                      {isAbsent && (
-                        <div className="border-t bg-card/60 px-3 py-2 space-y-2">
-                          {chosenSub ? (
-                            <div className="flex items-center justify-between pl-4 text-xs">
-                              <div className="flex items-center gap-1.5 text-[11px]">
-                                <span className="text-amber-600 font-bold">↳ Diganti oleh:</span>
-                                <span className="font-semibold text-foreground">{chosenSub.nama}</span>
-                                <span className="text-[10px] text-muted-foreground">
-                                  ({chosenSub.kelompok_nama ?? "Kelompok Lain"})
-                                </span>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="size-5 text-rose-500 hover:bg-rose-500/10"
-                                onClick={() => removeSubstitute(member.id)}
-                              >
-                                <X className="size-3" />
-                              </Button>
-                            </div>
-                          ) : isSearchingThis ? (
-                            <div className="space-y-1.5 pl-2 animate-in fade-in">
-                              <div className="flex items-center gap-1">
-                                <div className="relative flex-1">
-                                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground" />
-                                  <Input
-                                    autoFocus
-                                    placeholder={`Cari pengganti untuk ${member.nama}...`}
-                                    value={searchSubQuery}
-                                    onChange={(e) => setSearchSubQuery(e.target.value)}
-                                    className="pl-7 h-7 text-xs"
-                                  />
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="size-7 shrink-0"
-                                  onClick={() => {
-                                    setSearchingForId(null);
-                                    setSearchSubQuery("");
-                                  }}
-                                >
-                                  <X className="size-3.5" />
-                                </Button>
-                              </div>
-                              <div className="max-h-28 overflow-y-auto space-y-1 rounded-md border bg-muted/30 p-1">
-                                {isLoadingAnggota ? (
-                                  <p className="text-[10px] text-muted-foreground text-center py-1">Memuat...</p>
-                                ) : substituteCandidates.length === 0 ? (
-                                  <p className="text-[10px] text-muted-foreground text-center py-1">
-                                    {searchSubQuery ? "Tidak ditemukan." : "Ketik nama untuk mencari pengganti..."}
-                                  </p>
-                                ) : (
-                                  substituteCandidates.slice(0, 10).map((cand) => (
-                                    <button
-                                      key={cand.id}
-                                      type="button"
-                                      onClick={() => selectSubstitute(member.id, cand)}
-                                      className="w-full text-left px-2 py-1 rounded hover:bg-accent text-xs flex items-center justify-between transition-colors"
-                                    >
-                                      <span className="font-semibold">{cand.nama}</span>
-                                      <span className="text-[10px] text-muted-foreground">
-                                        {cand.kelompok_nama ?? "—"}
-                                      </span>
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="pl-4">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] text-amber-600 border-amber-500/40 hover:bg-amber-500/10"
-                                onClick={() => {
-                                  setSearchingForId(member.id);
-                                  setSearchSubQuery("");
-                                }}
-                              >
-                                <UserPlus className="size-3 mr-1" /> Pilih Pengganti
-                              </Button>
-                            </div>
-                          )}
+            {/* Section B: Peserta Pengganti (Substitutes) Fleksibel */}
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <UserPlus className="size-3.5 text-amber-600" />
+                  2. Peserta Pengganti / Substitute ({substitutes.length})
+                </Label>
+                {!isAddingSubstitute && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px] gap-1 text-amber-600 border-amber-500/40 hover:bg-amber-500/10 font-semibold"
+                    onClick={() => {
+                      setIsAddingSubstitute(true);
+                      setSearchSubQuery("");
+                    }}
+                  >
+                    <Plus className="size-3" /> Tambah Substitute
+                  </Button>
+                )}
+              </div>
+
+              {/* Add Substitute Autocomplete Panel */}
+              {isAddingSubstitute && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                      Cari Peserta Pengganti (Kelompok Lain):
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-5 text-muted-foreground hover:bg-muted"
+                      onClick={() => {
+                        setIsAddingSubstitute(false);
+                        setSearchSubQuery("");
+                      }}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2 size-3 text-muted-foreground" />
+                    <Input
+                      autoFocus
+                      placeholder="Cari nama peserta dari kelompok lain..."
+                      value={searchSubQuery}
+                      onChange={(e) => setSearchSubQuery(e.target.value)}
+                      className="pl-7 h-7 text-xs"
+                    />
+                  </div>
+
+                  <div className="max-h-32 overflow-y-auto space-y-1 border rounded-md bg-background p-1">
+                    {isLoadingAnggota ? (
+                      <p className="text-[10px] text-muted-foreground text-center py-2">Memuat daftar anggota...</p>
+                    ) : substituteCandidates.length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground text-center py-2">
+                        {searchSubQuery ? "Peserta tidak ditemukan." : "Ketik nama untuk mencari peserta..."}
+                      </p>
+                    ) : (
+                      substituteCandidates.slice(0, 10).map((cand) => (
+                        <button
+                          key={cand.id}
+                          type="button"
+                          onClick={() => addSubstitute(cand)}
+                          className="w-full text-left px-2 py-1.5 rounded hover:bg-amber-500/10 text-xs flex items-center justify-between transition-colors font-medium"
+                        >
+                          <span className="font-semibold text-foreground">{cand.nama}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {cand.kelompok_nama ?? "Kelompok Lain"}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* List of active substitutes */}
+              {substitutes.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground italic py-1 text-center bg-muted/20 rounded-md border border-dashed">
+                  Belum ada peserta pengganti. Klik &quot;+ Tambah Substitute&quot; jika ada anggota kelompok lain yang bergabung.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+                  {substitutes.map((sub) => (
+                    <div
+                      key={sub.substituteId}
+                      className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                          <Badge variant="warning" className="text-[9px]">Substitute</Badge>
+                          <span>{sub.nama}</span>
+                          <span className="text-[10px] text-muted-foreground">({sub.kelompokNama})</span>
                         </div>
-                      )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-5 text-rose-500 hover:bg-rose-500/10"
+                          onClick={() => removeSubstitute(sub.substituteId)}
+                          title="Hapus pengganti ini"
+                        >
+                          <X className="size-3" />
+                        </Button>
+                      </div>
+
+                      {/* Replaces member selector */}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground pt-1 border-t border-amber-500/20">
+                        <span className="shrink-0 font-medium">Menggantikan:</span>
+                        <select
+                          value={sub.replacesId || ""}
+                          onChange={(e) => updateSubstituteReplaces(sub.substituteId, e.target.value || null)}
+                          className="h-6 rounded border border-input bg-background px-2 text-[11px] flex-1 font-medium"
+                        >
+                          <option value="">-- Tanpa Penggantian Spesifik --</option>
+                          {Array.from(absentIds).map((absId) => {
+                            const absObj = aktifAnggota.find((a) => a.id === absId);
+                            return (
+                              <option key={absId} value={absId}>
+                                {absObj?.nama ?? "Anggota Absen"}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
                     </div>
-                  );
-                })
+                  ))}
+                </div>
               )}
             </div>
 
-            <p className="text-[10px] text-muted-foreground text-center">
-              Centang anggota yang hadir. Jika tidak hadir, dapat ditunjuk pengganti dari kelompok lain.
-            </p>
+            {/* Real-Time Progress Preview */}
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-xs pt-2">
+              <div className="flex items-center justify-between border-b pb-1">
+                <span className="font-semibold flex items-center gap-1 text-foreground text-[11px]">
+                  <TrendingUp className="size-3.5 text-primary" /> Real-Time Progress Preview ({totalHadir} Hadir)
+                </span>
+                {estimateResult && (
+                  <span className="text-[10px] font-bold text-emerald-600">
+                    +{estimateResult.totalIncrease} Progress Bertambah
+                  </span>
+                )}
+              </div>
+
+              {isLoadingEstimate ? (
+                <p className="text-[10px] text-muted-foreground italic text-center py-1">
+                  Menghitung estimasi progress peserta final...
+                </p>
+              ) : !estimateResult || estimateResult.totalParticipants === 0 ? (
+                <p className="text-[10px] text-muted-foreground text-center py-1">
+                  Pilih kating dan peserta hadir untuk melihat preview progress.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {estimateResult.willIncreaseList.length > 0 && (
+                    <div className="space-y-0.5">
+                      <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        🟢 Akan Bertambah (+1 Progress):
+                      </p>
+                      {estimateResult.willIncreaseList.map((p) => (
+                        <div key={p.anggotaId} className="flex items-center justify-between text-[11px] pl-2">
+                          <span className="font-medium">
+                            {p.nama} {p.isSubstitute && <span className="text-amber-600 text-[10px]">(pengganti {p.replacesNama})</span>}
+                          </span>
+                          <Badge variant="success" className="text-[9px]">+1 Progress</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {estimateResult.alreadyMetList.length > 0 && (
+                    <div className="space-y-0.5 pt-1 border-t border-border/40">
+                      <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        🟡 Sudah Pernah Bertemu (Progress Tidak Bertambah):
+                      </p>
+                      {estimateResult.alreadyMetList.map((p) => (
+                        <div key={p.anggotaId} className="flex items-center justify-between text-[11px] pl-2 text-muted-foreground">
+                          <span>
+                            {p.nama} {p.isSubstitute && <span className="text-amber-600 text-[10px]">(pengganti {p.replacesNama})</span>}
+                          </span>
+                          <Badge variant="outline" className="text-[9px] border-amber-500/50 text-amber-600">
+                            Sudah Pernah Bertemu
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -756,7 +935,7 @@ export function EditBookingDialog({
           <Button
             size="sm"
             onClick={handleSubmitEdit}
-            disabled={isPending || selectedKatingIds.size === 0}
+            disabled={isPending || selectedKatingIds.size === 0 || totalHadir === 0}
             className="bg-primary text-primary-foreground font-semibold text-xs"
           >
             {isPending ? "Menyimpan..." : "Simpan Perubahan"}

@@ -635,40 +635,105 @@ export async function updateBookingDetails(
       return { success: false, message: `Gagal memperbarui kating pendamping: ${insertBkErr.message}` };
     }
 
-    // 4.5. UPSERT booking_participants (maintain history & relations) if participants data is provided
+    // 4.5. Incremental Synchronization of booking_participants
+    // Preserves created_at, record IDs, relations, and audit trail of untouched records.
     if (data.participants) {
       const { presentOriginalIds, absentOriginalIds, substitutes } = data.participants;
-      const participantRows = [
-        ...presentOriginalIds.map((anggotaId) => ({
-          booking_id: bookingId,
-          anggota_id: anggotaId,
+
+      // Desired participant map by anggota_id
+      const desiredMap = new Map<
+        string,
+        { hadir: boolean; is_substitute: boolean; replaces_anggota_id: string | null }
+      >();
+
+      presentOriginalIds.forEach((anggotaId) => {
+        desiredMap.set(anggotaId, {
           hadir: true,
           is_substitute: false,
-          replaces_anggota_id: null as string | null,
-        })),
-        ...absentOriginalIds.map((anggotaId) => ({
-          booking_id: bookingId,
-          anggota_id: anggotaId,
+          replaces_anggota_id: null,
+        });
+      });
+
+      absentOriginalIds.forEach((anggotaId) => {
+        desiredMap.set(anggotaId, {
           hadir: false,
           is_substitute: false,
-          replaces_anggota_id: null as string | null,
-        })),
-        ...substitutes.map((sub) => ({
-          booking_id: bookingId,
-          anggota_id: sub.substituteId,
+          replaces_anggota_id: null,
+        });
+      });
+
+      substitutes.forEach((sub) => {
+        desiredMap.set(sub.substituteId, {
           hadir: true,
           is_substitute: true,
-          replaces_anggota_id: sub.replacesId,
-        })),
-      ];
+          replaces_anggota_id: sub.replacesId || null,
+        });
+      });
 
-      if (participantRows.length > 0) {
-        const { error: participantError } = await supabase
+      // Fetch existing booking_participants for this booking
+      const { data: existingRows } = await supabase
+        .from("booking_participants")
+        .select("id, anggota_id, hadir, is_substitute, replaces_anggota_id")
+        .eq("booking_id", bookingId);
+
+      const existingMap = new Map<string, any>(
+        (existingRows ?? []).map((r: any) => [r.anggota_id, r])
+      );
+
+      // 1. DELETE rows that are no longer in desiredMap
+      const idsToDelete = (existingRows ?? [])
+        .filter((r: any) => !desiredMap.has(r.anggota_id))
+        .map((r: any) => r.id);
+
+      if (idsToDelete.length > 0) {
+        await supabase
           .from("booking_participants")
-          .upsert(participantRows, { onConflict: "booking_id,anggota_id" });
+          .delete()
+          .in("id", idsToDelete);
+      }
 
-        if (participantError) {
-          console.error("[updateBookingDetails] booking_participants upsert error:", participantError.message);
+      // 2. UPDATE existing rows that changed
+      for (const [anggotaId, desired] of desiredMap.entries()) {
+        const existing = existingMap.get(anggotaId);
+        if (existing) {
+          if (
+            existing.hadir !== desired.hadir ||
+            existing.is_substitute !== desired.is_substitute ||
+            existing.replaces_anggota_id !== desired.replaces_anggota_id
+          ) {
+            await supabase
+              .from("booking_participants")
+              .update({
+                hadir: desired.hadir,
+                is_substitute: desired.is_substitute,
+                replaces_anggota_id: desired.replaces_anggota_id,
+              })
+              .eq("id", existing.id);
+          }
+        }
+      }
+
+      // 3. INSERT new rows that do not exist yet
+      const rowsToInsert: any[] = [];
+      for (const [anggotaId, desired] of desiredMap.entries()) {
+        if (!existingMap.has(anggotaId)) {
+          rowsToInsert.push({
+            booking_id: bookingId,
+            anggota_id: anggotaId,
+            hadir: desired.hadir,
+            is_substitute: desired.is_substitute,
+            replaces_anggota_id: desired.replaces_anggota_id,
+          });
+        }
+      }
+
+      if (rowsToInsert.length > 0) {
+        const { error: insertErr } = await supabase
+          .from("booking_participants")
+          .insert(rowsToInsert);
+
+        if (insertErr) {
+          console.error("[updateBookingDetails] booking_participants insert error:", insertErr.message);
         }
       }
     }
@@ -738,6 +803,7 @@ export async function updateBookingDetails(
 
 /**
  * Fetch participants for a given booking.
+ * Single source of truth for final booking participants across all views.
  */
 export async function fetchBookingParticipants(bookingId: string) {
   if (isSupabaseConfigured()) {
@@ -746,7 +812,10 @@ export async function fetchBookingParticipants(bookingId: string) {
       .from("booking_participants")
       .select(`
         id, booking_id, anggota_id, hadir, is_substitute, replaces_anggota_id,
-        anggota:anggota_id(id, nama, jenis_kelamin, kelompok_id, kelompok:kelompok_id(nomor_kelompok, kelas)),
+        anggota:anggota_id(
+          id, nama, jenis_kelamin, kelompok_id,
+          kelompok:kelompok_id(nomor_kelompok, kelas)
+        ),
         replaces:replaces_anggota_id(id, nama)
       `)
       .eq("booking_id", bookingId);
@@ -765,6 +834,18 @@ export async function fetchBookingParticipants(bookingId: string) {
       replaces_anggota_id: r.replaces_anggota_id,
       anggota_nama: r.anggota?.nama ?? "Anggota",
       replaces_nama: r.replaces?.nama ?? "Anggota",
+      anggota: r.anggota
+        ? {
+            id: r.anggota.id,
+            nama: r.anggota.nama,
+            jenis_kelamin: r.anggota.jenis_kelamin ?? "L",
+            kelompok_id: r.anggota.kelompok_id,
+            kelompok_nama: r.anggota.kelompok
+              ? `Kelompok ${r.anggota.kelompok.nomor_kelompok} (${r.anggota.kelompok.kelas})`
+              : "Kelompok",
+            aktif: true,
+          }
+        : null,
     }));
   }
   return [];
