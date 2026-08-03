@@ -12,6 +12,7 @@ import {
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchEventSettings } from "@/services/settings.service";
 import { fetchSlotList } from "@/services/slot.service";
+import { recordActivityLog } from "@/services/activity.service";
 import type { BookingStatus, CalendarBookingEntry, KatingBasic, Kating } from "@/types/database";
 
 // CalendarBookingEntry is defined in @/types/database and re-exported for convenience
@@ -93,7 +94,8 @@ export async function fetchBookingList(
  */
 export async function fetchAvailableKating(
   tanggal: string,
-  slot_id: string
+  slot_id: string,
+  excludeBookingId?: string
 ): Promise<Kating[]> {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
@@ -105,13 +107,19 @@ export async function fetchAvailableKating(
     if (!katingList) return [];
 
     // Langkah 1: Cari semua booking_id yang aktif (bukan Ditolak/Dibatalkan)
-    // untuk kombinasi (tanggal, slot_id) yang tepat.
-    const { data: activeBookings } = await supabase
+    // untuk kombinasi (tanggal, slot_id) yang tepat, terkecuali excludeBookingId jika ada.
+    let activeQuery = supabase
       .from("booking")
       .select("id")
       .eq("tanggal", tanggal)
       .eq("slot_id", slot_id)
       .not("status", "in", '("Ditolak","Dibatalkan")');
+
+    if (excludeBookingId) {
+      activeQuery = activeQuery.neq("id", excludeBookingId);
+    }
+
+    const { data: activeBookings } = await activeQuery;
 
     if (!activeBookings || activeBookings.length === 0) {
       return katingList as Kating[];
@@ -485,4 +493,279 @@ export async function fetchKatingCounts(): Promise<{ total: number }> {
     return { total: count ?? 0 };
   }
   return { total: 0 };
+}
+
+/**
+ * Update an existing booking in "Menunggu Konfirmasi" status with last-mile conflict check.
+ */
+export async function updateBookingDetails(
+  bookingId: string,
+  data: {
+    tanggal: string;
+    slot_id: string;
+    kating_ids: string[];
+    catatan?: string;
+    jam_pulang?: string | null;
+    tempat_taaruf?: string | null;
+    participants?: {
+      presentOriginalIds: string[];
+      absentOriginalIds: string[];
+      substitutes: { substituteId: string; replacesId: string }[];
+    };
+  }
+): Promise<{ success: boolean; data?: BookingWithDetails; message?: string }> {
+  if (!bookingId) {
+    return { success: false, message: "ID booking tidak valid." };
+  }
+
+  if (!data.tanggal || !data.slot_id || !data.kating_ids || data.kating_ids.length === 0) {
+    return { success: false, message: "Mohon lengkapi tanggal, slot, dan minimal 1 kating." };
+  }
+
+  if (isSupabaseConfigured()) {
+    const supabase = await createSupabaseServerClient();
+
+    // 1. Fetch current booking state
+    const { data: currentBooking, error: fetchErr } = await supabase
+      .from("booking")
+      .select(`
+        id, kelompok_id, tanggal, slot_id, status, catatan, jam_pulang, tempat_taaruf,
+        kelompok:kelompok_id(nomor_kelompok, kelas),
+        slot:slot_id(nama_slot),
+        booking_kating(kating_id, kating:kating_id(nama))
+      `)
+      .eq("id", bookingId)
+      .single();
+
+    if (fetchErr || !currentBooking) {
+      return { success: false, message: "Booking tidak ditemukan." };
+    }
+
+    if (currentBooking.status !== "Menunggu Konfirmasi") {
+      return {
+        success: false,
+        message: `Hanya booking berstatus "Menunggu Konfirmasi" yang dapat diubah. Status saat ini: "${currentBooking.status}".`,
+      };
+    }
+
+    // Fetch slot name for new slot_id if changed
+    const { data: newSlot } = await supabase
+      .from("slot_waktu")
+      .select("nama_slot")
+      .eq("id", data.slot_id)
+      .single();
+
+    // 2. LAST-MILE CONFLICT CHECK (Right before UPDATE)
+    // Check if any selected kating is already booked by another active booking on this date & slot
+    const { data: conflictingBookings } = await supabase
+      .from("booking")
+      .select("id")
+      .eq("tanggal", data.tanggal)
+      .eq("slot_id", data.slot_id)
+      .neq("id", bookingId)
+      .not("status", "in", '("Ditolak","Dibatalkan")');
+
+    if (conflictingBookings && conflictingBookings.length > 0) {
+      const conflictingBookingIds = conflictingBookings.map((b: any) => b.id);
+      const { data: busyKatingRows } = await supabase
+        .from("booking_kating")
+        .select("kating_id, kating:kating_id(nama)")
+        .in("booking_id", conflictingBookingIds)
+        .in("kating_id", data.kating_ids);
+
+      if (busyKatingRows && busyKatingRows.length > 0) {
+        const busyNames = busyKatingRows.map((r: any) => r.kating?.nama ?? "Kating").join(", ");
+        return {
+          success: false,
+          message: `🔴 Konflik Booking: ${busyNames} sudah dibooking oleh kelompok lain pada tanggal ${data.tanggal} slot ${newSlot?.nama_slot ?? "tersebut"}. Silakan pilih kating lain.`,
+        };
+      }
+    }
+
+    // Fetch new kating names for logging
+    const { data: newKatingList } = await supabase
+      .from("kating")
+      .select("id, nama")
+      .in("id", data.kating_ids);
+
+    const oldKatingNames = (currentBooking.booking_kating ?? [])
+      .map((bk: any) => bk.kating?.nama ?? "Kating")
+      .join(", ") || "-";
+    const newKatingNames = (newKatingList ?? []).map((k: any) => k.nama).join(", ") || "-";
+
+    const oldSlotName = (currentBooking.slot as any)?.nama_slot ?? "Slot";
+    const newSlotName = newSlot?.nama_slot ?? "Slot";
+
+    // 3. Perform UPDATE on booking table (booking_id remains unchanged)
+    const { error: updateErr } = await supabase
+      .from("booking")
+      .update({
+        tanggal: data.tanggal,
+        slot_id: data.slot_id,
+        catatan: data.catatan || null,
+        jam_pulang: data.jam_pulang || null,
+        tempat_taaruf: data.tempat_taaruf || null,
+      })
+      .eq("id", bookingId);
+
+    if (updateErr) {
+      return { success: false, message: `Gagal memperbarui booking: ${updateErr.message}` };
+    }
+
+    // 4. Update booking_kating table
+    const { error: deleteBkErr } = await supabase
+      .from("booking_kating")
+      .delete()
+      .eq("booking_id", bookingId);
+
+    if (deleteBkErr) {
+      console.error("[updateBookingDetails] delete booking_kating error:", deleteBkErr.message);
+    }
+
+    const newBkRows = data.kating_ids.map((kating_id) => ({
+      booking_id: bookingId,
+      kating_id,
+    }));
+
+    const { error: insertBkErr } = await supabase
+      .from("booking_kating")
+      .insert(newBkRows);
+
+    if (insertBkErr) {
+      return { success: false, message: `Gagal memperbarui kating pendamping: ${insertBkErr.message}` };
+    }
+
+    // 4.5. UPSERT booking_participants (maintain history & relations) if participants data is provided
+    if (data.participants) {
+      const { presentOriginalIds, absentOriginalIds, substitutes } = data.participants;
+      const participantRows = [
+        ...presentOriginalIds.map((anggotaId) => ({
+          booking_id: bookingId,
+          anggota_id: anggotaId,
+          hadir: true,
+          is_substitute: false,
+          replaces_anggota_id: null as string | null,
+        })),
+        ...absentOriginalIds.map((anggotaId) => ({
+          booking_id: bookingId,
+          anggota_id: anggotaId,
+          hadir: false,
+          is_substitute: false,
+          replaces_anggota_id: null as string | null,
+        })),
+        ...substitutes.map((sub) => ({
+          booking_id: bookingId,
+          anggota_id: sub.substituteId,
+          hadir: true,
+          is_substitute: true,
+          replaces_anggota_id: sub.replacesId,
+        })),
+      ];
+
+      if (participantRows.length > 0) {
+        const { error: participantError } = await supabase
+          .from("booking_participants")
+          .upsert(participantRows, { onConflict: "booking_id,anggota_id" });
+
+        if (participantError) {
+          console.error("[updateBookingDetails] booking_participants upsert error:", participantError.message);
+        }
+      }
+    }
+
+    // 5. Detailed Activity Log
+    const kelompokObj = (currentBooking as any).kelompok;
+    const kelompokInfo = kelompokObj
+      ? `Kelompok ${Array.isArray(kelompokObj) ? kelompokObj[0]?.nomor_kelompok : kelompokObj.nomor_kelompok} (${Array.isArray(kelompokObj) ? kelompokObj[0]?.kelas : kelompokObj.kelas})`
+      : "Kelompok";
+
+    const logDetails = `${kelompokInfo} mengubah booking\nTanggal: ${currentBooking.tanggal} → ${data.tanggal}\nSlot: ${oldSlotName} → ${newSlotName}\nKating: ${oldKatingNames} → ${newKatingNames}`;
+
+    await recordActivityLog(
+      kelompokInfo,
+      "kelompok",
+      "Booking Diubah",
+      logDetails
+    );
+
+    // 6. Fetch updated full booking
+    const { data: updatedFull } = await supabase
+      .from("booking")
+      .select(
+        `id, kelompok_id, tanggal, slot_id, status, catatan, jam_pulang, tempat_taaruf, created_at,
+        kelompok:kelompok_id(nomor_kelompok, kelas),
+        slot:slot_id(nama_slot, jam_mulai, jam_selesai),
+        booking_kating(kating_id, contacted, contacted_at, kating:kating_id(id, nama, jenis_kelamin, nomor_whatsapp))`
+      )
+      .eq("id", bookingId)
+      .single();
+
+    if (updatedFull) {
+      const b = updatedFull as any;
+      const resultBooking: BookingWithDetails = {
+        id: b.id,
+        kelompok_id: b.kelompok_id,
+        tanggal: b.tanggal,
+        slot_id: b.slot_id,
+        status: b.status as BookingStatus,
+        catatan: b.catatan,
+        jam_pulang: b.jam_pulang ?? null,
+        tempat_taaruf: b.tempat_taaruf ?? null,
+        created_at: b.created_at,
+        kelompok_nama: b.kelompok
+          ? `Kelompok ${b.kelompok.nomor_kelompok} (${b.kelompok.kelas})`
+          : "Kelompok",
+        slot_nama: b.slot?.nama_slot ?? "Slot",
+        jam_mulai: b.slot?.jam_mulai ?? "00:00",
+        jam_selesai: b.slot?.jam_selesai ?? "00:00",
+        kating_list: (b.booking_kating ?? []).map((bk: any) => ({
+          id: bk.kating?.id ?? bk.kating_id,
+          nama: bk.kating?.nama ?? "Kating",
+          jenis_kelamin: bk.kating?.jenis_kelamin ?? "L",
+          nomor_whatsapp: bk.kating?.nomor_whatsapp ?? "",
+          contacted: bk.contacted ?? false,
+          contacted_at: bk.contacted_at ?? null,
+        })) as KatingBasic[],
+      };
+      return { success: true, data: resultBooking, message: "Booking berhasil diperbarui." };
+    }
+
+    return { success: true, message: "Booking berhasil diperbarui." };
+  }
+
+  return { success: false, message: "Supabase belum dikonfigurasi." };
+}
+
+/**
+ * Fetch participants for a given booking.
+ */
+export async function fetchBookingParticipants(bookingId: string) {
+  if (isSupabaseConfigured()) {
+    const supabase = await createSupabaseServerClient();
+    const { data: rows, error } = await supabase
+      .from("booking_participants")
+      .select(`
+        id, booking_id, anggota_id, hadir, is_substitute, replaces_anggota_id,
+        anggota:anggota_id(id, nama, jenis_kelamin, kelompok_id, kelompok:kelompok_id(nomor_kelompok, kelas)),
+        replaces:replaces_anggota_id(id, nama)
+      `)
+      .eq("booking_id", bookingId);
+
+    if (error) {
+      console.error("[fetchBookingParticipants] error:", error.message);
+      return [];
+    }
+
+    return (rows ?? []).map((r: any) => ({
+      id: r.id,
+      booking_id: r.booking_id,
+      anggota_id: r.anggota_id,
+      hadir: r.hadir,
+      is_substitute: r.is_substitute,
+      replaces_anggota_id: r.replaces_anggota_id,
+      anggota_nama: r.anggota?.nama ?? "Anggota",
+      replaces_nama: r.replaces?.nama ?? "Anggota",
+    }));
+  }
+  return [];
 }

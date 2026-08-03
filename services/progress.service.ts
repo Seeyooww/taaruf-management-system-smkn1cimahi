@@ -8,6 +8,7 @@ import {
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 import { fetchEventSettings } from "@/services/settings.service";
+import { recordActivityLog } from "@/services/activity.service";
 import type {
   AnggotaProgressSummary,
   MetKatingDetail,
@@ -178,44 +179,42 @@ export async function saveBookingProgress(
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
 
-    // ── Idempotency guard: abort if already confirmed ────────────────────────
-    const { data: existingParticipant } = await supabase
-      .from("booking_participants")
+    // ── Idempotency guard: Single Source of Truth = progress table ──────────
+    const { data: existingProgress } = await supabase
+      .from("progress")
       .select("id")
       .eq("booking_id", bookingId)
       .limit(1)
       .maybeSingle();
 
-    if (existingParticipant) {
+    if (existingProgress) {
       return {
         success: false,
         message: "Progress untuk sesi ini sudah pernah dikonfirmasi sebelumnya.",
       };
     }
 
-    // ── Fetch kating IDs from booking_kating (not from booking directly) ──────
+    // ── Fetch booking details and kating IDs ──────────────────────────────────
+    const { data: bookingData } = await supabase
+      .from("booking")
+      .select("id, kelompok:kelompok_id(nomor_kelompok, kelas)")
+      .eq("id", bookingId)
+      .single();
+
     const { data: bkRows } = await supabase
       .from("booking_kating")
-      .select("kating_id")
+      .select("kating_id, kating:kating_id(id, nama)")
       .eq("booking_id", bookingId);
 
     if (!bkRows || bkRows.length === 0) {
       return { success: false, message: "Booking tidak ditemukan atau tidak memiliki kating." };
     }
 
-    const katingIds = bkRows.map((r: any) => r.kating_id).filter(Boolean);
+    const katingList = bkRows.map((r: any) => r.kating).filter(Boolean);
+    const katingIds = katingList.map((k: any) => k.id);
+    const katingNames = katingList.map((k: any) => k.nama).join(", ");
 
-    // ── Mark booking as Selesai ───────────────────────────────────────────────
-    const { error: statusError } = await supabase
-      .from("booking")
-      .update({ status: "Selesai" })
-      .eq("id", bookingId);
-
-    if (statusError) {
-      return { success: false, message: `Gagal memperbarui status booking: ${statusError.message}` };
-    }
-
-    // ── Batch insert booking_participants ────────────────────────────────────
+    // ── UPSERT booking_participants (maintain history & relations) ────────────
     const participantRows = [
       ...presentOriginalIds.map((anggotaId) => ({
         booking_id: bookingId,
@@ -243,47 +242,87 @@ export async function saveBookingProgress(
     if (participantRows.length > 0) {
       const { error: participantError } = await supabase
         .from("booking_participants")
-        .insert(participantRows);
+        .upsert(participantRows, { onConflict: "booking_id,anggota_id" });
 
       if (participantError) {
-        if (participantError.code === "23505") {
-          return { success: false, message: "Progress untuk sesi ini sudah pernah dikonfirmasi." };
-        }
-        return { success: false, message: `Gagal menyimpan data kehadiran: ${participantError.message}` };
+        return { success: false, message: `Gagal menyimpan data presensi: ${participantError.message}` };
       }
     }
 
-    // ── Batch insert progress records (all participant × all kating) ──────────
+    // ── Detect duplicate progress vs new progress ─────────────────────────────
     const participantIdsForProgress = [
       ...presentOriginalIds,
       ...substitutes.map((s) => s.substituteId),
     ];
 
+    let newProgressCount = 0;
+    let duplicateMeetingCount = 0;
+
     if (participantIdsForProgress.length > 0 && katingIds.length > 0) {
+      // Query existing progress records for these participants & kating
+      const { data: existingProgressRows } = await supabase
+        .from("progress")
+        .select("anggota_id, kating_id")
+        .in("anggota_id", participantIdsForProgress)
+        .in("kating_id", katingIds);
+
+      const existingPairSet = new Set<string>();
+      (existingProgressRows ?? []).forEach((row: any) => {
+        existingPairSet.add(`${row.anggota_id}:${row.kating_id}`);
+      });
+
       const progressRows: { anggota_id: string; booking_id: string; kating_id: string }[] = [];
       for (const anggotaId of participantIdsForProgress) {
         for (const katingId of katingIds) {
-          progressRows.push({ anggota_id: anggotaId, booking_id: bookingId, kating_id: katingId });
+          if (!existingPairSet.has(`${anggotaId}:${katingId}`)) {
+            progressRows.push({ anggota_id: anggotaId, booking_id: bookingId, kating_id: katingId });
+            newProgressCount++;
+          } else {
+            duplicateMeetingCount++;
+          }
         }
       }
 
-      const adminClient = createSupabaseAdminClient();
-      const { error: progressError } = await adminClient
-        .from("progress")
-        .upsert(progressRows, { onConflict: "anggota_id,kating_id", ignoreDuplicates: true });
+      if (progressRows.length > 0) {
+        const adminClient = createSupabaseAdminClient();
+        const { error: progressError } = await adminClient
+          .from("progress")
+          .upsert(progressRows, { onConflict: "anggota_id,kating_id", ignoreDuplicates: true });
 
-      if (progressError) {
-        console.error("[saveBookingProgress] progress upsert error:", progressError.message);
+        if (progressError) {
+          console.error("[saveBookingProgress] progress insert error:", progressError.message);
+          return { success: false, message: `Gagal menyimpan progress: ${progressError.message}` };
+        }
       }
     }
 
+    // ── Update booking status to Selesai ONLY AFTER progress is saved ──────────
+    const { error: statusError } = await supabase
+      .from("booking")
+      .update({ status: "Selesai" })
+      .eq("id", bookingId);
+
+    if (statusError) {
+      return { success: false, message: `Gagal memperbarui status booking: ${statusError.message}` };
+    }
+
+    // ── Log Activity ──────────────────────────────────────────────────────────
+    const kelompokObj = (bookingData as any)?.kelompok;
+    const kelompokNama = kelompokObj
+      ? `Kelompok ${Array.isArray(kelompokObj) ? kelompokObj[0]?.nomor_kelompok : kelompokObj.nomor_kelompok}`
+      : "Kelompok";
     const totalHadir = presentOriginalIds.length + substitutes.length;
-    const totalTidakHadir = absentOriginalIds.length;
-    const totalPengganti = substitutes.length;
+
+    await recordActivityLog(
+      kelompokNama,
+      "kelompok",
+      "Progress Dihitung",
+      `Konfirmasi presensi booking ${bookingId} (${totalHadir} hadir, ${substitutes.length} pengganti). Kating: ${katingNames}. Progress bertambah: ${newProgressCount}, Sudah pernah bertemu sebelumnya: ${duplicateMeetingCount}.`
+    );
 
     return {
       success: true,
-      message: `Progress dihitung: ${totalHadir} hadir (${totalPengganti} pengganti), ${totalTidakHadir} tidak hadir.`,
+      message: `Progress berhasil disimpan: ${totalHadir} peserta hadir (${substitutes.length} pengganti). Progress bertambah: ${newProgressCount}.`,
     };
   }
 

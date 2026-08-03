@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CheckCircle,
+  Edit,
   MessageSquare,
   Plus,
   Search,
@@ -27,6 +28,7 @@ import { BookingStepperDialog } from "@/components/kelompok/booking-stepper-dial
 import { WhatsAppPreviewDialog } from "@/components/kelompok/whatsapp-preview-dialog";
 import { BookingCalendarView } from "@/components/kelompok/booking-calendar-view";
 import { BookingCompleteDialog } from "@/components/kelompok/booking-complete-dialog";
+import { EditBookingDialog } from "@/components/kelompok/edit-booking-dialog";
 import { WhatsAppApprovedActions } from "@/components/ui/whatsapp-approved-actions";
 import { updateBookingStatusAction } from "@/services/booking.actions";
 import type {
@@ -73,6 +75,9 @@ export function KelompokBookingView({
   const [selectedWaBooking, setSelectedWaBooking] = React.useState<BookingWithDetails | null>(null);
   const [isCompleteOpen, setIsCompleteOpen] = React.useState(false);
   const [completeBooking, setCompleteBooking] = React.useState<BookingWithDetails | null>(null);
+  // Edit Booking dialog state
+  const [isEditOpen, setIsEditOpen] = React.useState(false);
+  const [editBooking, setEditBooking] = React.useState<BookingWithDetails | null>(null);
 
   const filteredBookings = React.useMemo(() => {
     return bookings.filter((b) => {
@@ -137,6 +142,13 @@ export function KelompokBookingView({
     );
   };
 
+  /** Setelah booking berhasil diedit (dari EditBookingDialog) */
+  const handleBookingUpdated = (updatedBooking: BookingWithDetails) => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === updatedBooking.id ? updatedBooking : b))
+    );
+  };
+
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
       case "Disetujui":
@@ -159,30 +171,46 @@ export function KelompokBookingView({
   const renderActionCell = (item: BookingWithDetails) => {
     const isLoading = loadingId === item.id;
 
-    // === Menunggu Konfirmasi: kelompok input hasil balasan WA ===
+    // === Menunggu Konfirmasi: kelompok input hasil balasan WA + Ubah Booking ===
     if (item.status === "Menunggu Konfirmasi") {
       return (
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <span className="text-[10px] text-muted-foreground mr-1">Balasan WA:</span>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <span className="text-[10px] text-muted-foreground self-center">Balasan WA:</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 min-h-[32px] text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+              disabled={isLoading}
+              onClick={() => handleUpdateStatus(item.id, "Disetujui")}
+            >
+              <CheckCircle className="size-3" />
+              Diterima
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 min-h-[32px] text-xs gap-1 text-rose-600 border-rose-500/40 hover:bg-rose-500/10"
+              disabled={isLoading}
+              onClick={() => handleUpdateStatus(item.id, "Ditolak")}
+            >
+              <XCircle className="size-3" />
+              Ditolak
+            </Button>
+          </div>
+          {/* Ubah Booking — hanya untuk Menunggu Konfirmasi */}
           <Button
             size="sm"
             variant="outline"
-            className="h-8 min-h-[32px] text-xs gap-1 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/10"
+            className="h-7 min-h-[28px] text-[11px] gap-1 text-primary border-primary/40 hover:bg-primary/10"
             disabled={isLoading}
-            onClick={() => handleUpdateStatus(item.id, "Disetujui")}
+            onClick={() => {
+              setEditBooking(item);
+              setIsEditOpen(true);
+            }}
           >
-            <CheckCircle className="size-3" />
-            Diterima
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 min-h-[32px] text-xs gap-1 text-rose-600 border-rose-500/40 hover:bg-rose-500/10"
-            disabled={isLoading}
-            onClick={() => handleUpdateStatus(item.id, "Ditolak")}
-          >
-            <XCircle className="size-3" />
-            Ditolak
+            <Edit className="size-3" />
+            Ubah Booking
           </Button>
         </div>
       );
@@ -394,13 +422,24 @@ export function KelompokBookingView({
         anggotaList={anggotaList}
       />
 
-      {/* Booking Complete (Attendance) Dialog */}
+      {/* Booking Complete (Attendance + Substitute + Progress) Dialog */}
       <BookingCompleteDialog
         open={isCompleteOpen}
         onOpenChange={setIsCompleteOpen}
         booking={completeBooking}
         anggotaList={anggotaList}
         onCompleted={handleTaarufCompleted}
+      />
+
+      {/* Edit Booking Dialog (hanya untuk status Menunggu Konfirmasi) */}
+      <EditBookingDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        booking={editBooking}
+        settings={settings}
+        slotList={slotList}
+        anggotaList={anggotaList}
+        onBookingUpdated={handleBookingUpdated}
       />
     </div>
   );
