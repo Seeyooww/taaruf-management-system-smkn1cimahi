@@ -270,7 +270,8 @@ export async function createBooking(data: {
           anggota_id: sub.substituteId,
           hadir: true,
           is_substitute: true,
-          replaces_anggota_id: sub.replacesId,
+          // Guard: jangan pernah kirim string kosong / placeholder ke kolom UUID
+          replaces_anggota_id: sub.replacesId || null,
         })),
       ];
 
@@ -666,6 +667,7 @@ export async function updateBookingDetails(
         desiredMap.set(sub.substituteId, {
           hadir: true,
           is_substitute: true,
+          // Guard: jangan pernah kirim string kosong / placeholder ke kolom UUID
           replaces_anggota_id: sub.replacesId || null,
         });
       });

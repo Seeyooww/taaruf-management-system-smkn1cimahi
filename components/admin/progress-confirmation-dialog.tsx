@@ -212,7 +212,8 @@ export function ProgressConfirmationDialog({
 
     const substituteEntries: SubstituteEntry[] = substitutes.map((s) => ({
       substituteId: s.substituteId,
-      replacesId: s.replacesId ?? "",
+      // Peserta tambahan (bukan pengganti) tidak memiliki replacesId → kirim null, BUKAN string kosong
+      replacesId: s.replacesId || null,
     }));
 
     startTransition(async () => {

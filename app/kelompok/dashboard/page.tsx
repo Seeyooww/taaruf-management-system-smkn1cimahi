@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
-  Activity,
   Bell,
   CalendarCheck,
   CheckCircle2,
   Clock,
+  Eye,
   Sparkles,
   Target,
+  Trophy,
 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -90,10 +91,15 @@ export default async function KelompokDashboardPage() {
               Beranda resmi kelompok untuk memantau alur kegiatan Taaruf SMKN 1 Cimahi.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" variant="outline" className="text-xs font-semibold">
-              <Link href="/kelompok/progress">
-                <Activity className="mr-1.5 size-3.5 text-blue-500" /> Progress Anggota
+              <Link href="/kelompok/leaderboard">
+                <Trophy className="mr-1.5 size-3.5 text-amber-500" /> Leaderboard
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline" className="text-xs font-semibold">
+              <Link href="/kelompok/monitoring">
+                <Eye className="mr-1.5 size-3.5 text-emerald-500" /> Monitoring
               </Link>
             </Button>
             <Button asChild size="sm" className="font-semibold text-xs shadow-xs bg-primary">

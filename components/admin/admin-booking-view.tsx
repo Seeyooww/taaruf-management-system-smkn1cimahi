@@ -30,6 +30,7 @@ interface AdminBookingViewProps {
   slotList: SlotWaktu[];
   allAnggotaList: Anggota[];
   settings: EventSettings;
+  readOnly?: boolean;
 }
 
 export function AdminBookingView({
@@ -38,6 +39,7 @@ export function AdminBookingView({
   slotList,
   allAnggotaList,
   settings,
+  readOnly = false,
 }: AdminBookingViewProps) {
   const [data, setData] = React.useState<BookingWithDetails[]>(initialBookings);
   const [search, setSearch] = React.useState("");
@@ -52,6 +54,7 @@ export function AdminBookingView({
   const [slotFilter, setSlotFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [kelompokFilter, setKelompokFilter] = React.useState("all");
+  const [katingFilter, setKatingFilter] = React.useState("all");
 
   const [page, setPage] = React.useState(1);
   const pageSize = 8;
@@ -62,24 +65,36 @@ export function AdminBookingView({
   const [deleteTarget, setDeleteTarget] = React.useState<BookingWithDetails | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  // Derive unique kating list for dropdown filter
+  const allKatingList = React.useMemo(() => {
+    const map = new Map<string, string>();
+    data.forEach((b) => {
+      (b.kating_list ?? []).forEach((k) => {
+        if (k.id && k.nama) map.set(k.id, k.nama);
+      });
+    });
+    return Array.from(map.entries()).map(([id, nama]) => ({ id, nama })).sort((a, b) => a.nama.localeCompare(b.nama));
+  }, [data]);
+
   const filteredData = React.useMemo(() => {
     return data.filter((item) => {
       const q = search.toLowerCase();
-      const katingMatch = (item.kating_list ?? []).some((k) =>
+      const katingMatchSearch = (item.kating_list ?? []).some((k) =>
         k.nama.toLowerCase().includes(q)
       );
       const matchSearch =
         (item.kelompok_nama && item.kelompok_nama.toLowerCase().includes(q)) ||
-        katingMatch;
+        katingMatchSearch;
 
       const matchDate = dateFilter ? item.tanggal === dateFilter : true;
       const matchSlot = slotFilter === "all" ? true : item.slot_id === slotFilter;
       const matchStatus = statusFilter === "all" ? true : item.status === statusFilter;
       const matchKelompok = kelompokFilter === "all" ? true : item.kelompok_id === kelompokFilter;
+      const matchKating = katingFilter === "all" ? true : (item.kating_list ?? []).some((k) => k.id === katingFilter);
 
-      return matchSearch && matchDate && matchSlot && matchStatus && matchKelompok;
+      return matchSearch && matchDate && matchSlot && matchStatus && matchKelompok && matchKating;
     });
-  }, [data, search, dateFilter, slotFilter, statusFilter, kelompokFilter]);
+  }, [data, search, dateFilter, slotFilter, statusFilter, kelompokFilter, katingFilter]);
 
   const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
   const paginatedData = React.useMemo(() => {
@@ -157,9 +172,13 @@ export function AdminBookingView({
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Manajemen Booking Kelompok</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {readOnly ? "Monitoring Booking Kelompok" : "Manajemen Booking Kelompok"}
+          </h1>
           <p className="text-xs text-muted-foreground">
-            Kelola persetujuan, penolakan, verifikasi, dan visualisasi kalender sesi Taaruf.
+            {readOnly
+              ? "Pantau seluruh jadwal booking & ketersediaan kating sesi Taaruf secara real-time."
+              : "Kelola persetujuan, penolakan, verifikasi, dan visualisasi kalender sesi Taaruf."}
           </p>
         </div>
 
@@ -271,7 +290,23 @@ export function AdminBookingView({
                   ))}
                 </select>
 
-                {(dateFilter || slotFilter !== "all" || statusFilter !== "all" || kelompokFilter !== "all") && (
+                <select
+                  value={katingFilter}
+                  onChange={(e) => {
+                    setKatingFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="h-9 rounded-xl border border-input bg-background px-2 text-xs w-full sm:w-auto"
+                >
+                  <option value="all">Semua Kating</option>
+                  {allKatingList.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.nama}
+                    </option>
+                  ))}
+                </select>
+
+                {(dateFilter || slotFilter !== "all" || statusFilter !== "all" || kelompokFilter !== "all" || katingFilter !== "all") && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -280,6 +315,7 @@ export function AdminBookingView({
                       setSlotFilter("all");
                       setStatusFilter("all");
                       setKelompokFilter("all");
+                      setKatingFilter("all");
                     }}
                     className="h-9 text-xs text-muted-foreground w-full sm:w-auto"
                   >
@@ -299,13 +335,15 @@ export function AdminBookingView({
                     <TableHead className="text-xs">Tanggal & Slot</TableHead>
                     <TableHead className="text-xs">Pasangan Kating</TableHead>
                     <TableHead className="w-28 text-xs">Status</TableHead>
-                    <TableHead className="text-right text-xs">Status Komunikasi & Aksi Admin</TableHead>
+                    {!readOnly && (
+                      <TableHead className="text-right text-xs">Status Komunikasi & Aksi Admin</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground text-xs">
+                      <TableCell colSpan={readOnly ? 4 : 5} className="text-center py-8 text-muted-foreground text-xs">
                         Tidak ada permohonan booking ditemukan.
                       </TableCell>
                     </TableRow>
@@ -338,76 +376,78 @@ export function AdminBookingView({
                           </div>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">{getStatusBadge(item.status)}</TableCell>
-                        <TableCell className="text-right p-3 min-w-[200px]">
-                          <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {item.status === "Disetujui" && (
-                              <WhatsAppApprovedActions
-                                booking={item}
-                                anggotaList={allAnggotaList.filter((a) => a.kelompok_id === item.kelompok_id)}
-                                onContactedUpdate={handleContactedUpdate}
-                              />
-                            )}
+                        {!readOnly && (
+                          <TableCell className="text-right p-3 min-w-[200px]">
+                            <div className="flex flex-wrap items-center justify-end gap-1.5">
+                              {item.status === "Disetujui" && (
+                                <WhatsAppApprovedActions
+                                  booking={item}
+                                  anggotaList={allAnggotaList.filter((a) => a.kelompok_id === item.kelompok_id)}
+                                  onContactedUpdate={handleContactedUpdate}
+                                />
+                              )}
 
-                            {item.status === "Menunggu Konfirmasi" && (
-                              <div className="flex flex-wrap gap-1">
+                              {item.status === "Menunggu Konfirmasi" && (
+                                <div className="flex flex-wrap gap-1">
+                                  <Button
+                                    size="sm"
+                                    disabled={isPending}
+                                    onClick={() => handleUpdateStatus(item, "Disetujui")}
+                                    className="h-8 min-h-[32px] px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  >
+                                    <Check className="mr-1 size-3" /> Setujui
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={isPending}
+                                    onClick={() => handleUpdateStatus(item, "Ditolak")}
+                                    className="h-8 min-h-[32px] px-2 text-xs"
+                                  >
+                                    <X className="mr-1 size-3" /> Tolak
+                                  </Button>
+                                </div>
+                              )}
+
+                              {item.status === "Disetujui" && (
                                 <Button
                                   size="sm"
                                   disabled={isPending}
-                                  onClick={() => handleUpdateStatus(item, "Disetujui")}
-                                  className="h-8 min-h-[32px] px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  onClick={() => handleUpdateStatus(item, "Selesai")}
+                                  className="h-8 min-h-[32px] px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
                                 >
-                                  <Check className="mr-1 size-3" /> Setujui
+                                  <Activity className="size-3" /> Presensi & Selesai
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  disabled={isPending}
-                                  onClick={() => handleUpdateStatus(item, "Ditolak")}
-                                  className="h-8 min-h-[32px] px-2 text-xs"
-                                >
-                                  <X className="mr-1 size-3" /> Tolak
-                                </Button>
-                              </div>
-                            )}
+                              )}
 
-                            {item.status === "Disetujui" && (
-                              <Button
-                                size="sm"
+                              <select
+                                value={item.status}
                                 disabled={isPending}
-                                onClick={() => handleUpdateStatus(item, "Selesai")}
-                                className="h-8 min-h-[32px] px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                                onChange={(e) =>
+                                  handleUpdateStatus(item, e.target.value as BookingStatus)
+                                }
+                                className="h-8 rounded-md border border-input bg-background px-1 text-[11px]"
                               >
-                                <Activity className="size-3" /> Presensi & Selesai
-                              </Button>
-                            )}
+                                <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
+                                <option value="Disetujui">Disetujui</option>
+                                <option value="Selesai">Selesai</option>
+                                <option value="Ditolak">Ditolak</option>
+                                <option value="Dibatalkan">Dibatalkan</option>
+                                <option value="Tidak Dihitung">Tidak Dihitung</option>
+                              </select>
 
-                            <select
-                              value={item.status}
-                              disabled={isPending}
-                              onChange={(e) =>
-                                handleUpdateStatus(item, e.target.value as BookingStatus)
-                              }
-                              className="h-8 rounded-md border border-input bg-background px-1 text-[11px]"
-                            >
-                              <option value="Menunggu Konfirmasi">Menunggu Konfirmasi</option>
-                              <option value="Disetujui">Disetujui</option>
-                              <option value="Selesai">Selesai</option>
-                              <option value="Ditolak">Ditolak</option>
-                              <option value="Dibatalkan">Dibatalkan</option>
-                              <option value="Tidak Dihitung">Tidak Dihitung</option>
-                            </select>
-
-                            {/* Delete Button */}
-                            <button
-                              type="button"
-                              title="Hapus booking ini"
-                              onClick={() => setDeleteTarget(item)}
-                              className="h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-md border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
-                          </div>
-                        </TableCell>
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                title="Hapus booking ini"
+                                onClick={() => setDeleteTarget(item)}
+                                className="h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-md border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors shrink-0"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))
                   )}
@@ -445,41 +485,45 @@ export function AdminBookingView({
         </Card>
       )}
 
-      {/* Progress & Attendance Confirmation Dialog */}
-      <ProgressConfirmationDialog
-        open={isProgressOpen}
-        onOpenChange={setIsProgressOpen}
-        booking={targetBookingForProgress}
-        allAnggotaList={allAnggotaList}
-        onProgressCalculated={() => {
-          if (targetBookingForProgress) {
-            setData((prev) =>
-              prev.map((b) =>
-                b.id === targetBookingForProgress.id ? { ...b, status: "Selesai" } : b
-              )
-            );
-          }
-          setIsProgressOpen(false);
-          setTargetBookingForProgress(null);
-          // Refresh server data so progress page and stats counters are up-to-date
-          router.refresh();
-        }}
-      />
+      {/* Progress & Attendance Confirmation Dialog — only in admin mode */}
+      {!readOnly && (
+        <ProgressConfirmationDialog
+          open={isProgressOpen}
+          onOpenChange={setIsProgressOpen}
+          booking={targetBookingForProgress}
+          allAnggotaList={allAnggotaList}
+          onProgressCalculated={() => {
+            if (targetBookingForProgress) {
+              setData((prev) =>
+                prev.map((b) =>
+                  b.id === targetBookingForProgress.id ? { ...b, status: "Selesai" } : b
+                )
+              );
+            }
+            setIsProgressOpen(false);
+            setTargetBookingForProgress(null);
+            // Refresh server data so progress page and stats counters are up-to-date
+            router.refresh();
+          }}
+        />
+      )}
 
-      {/* Confirm Delete Dialog */}
-      <ConfirmDeleteDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
-        title="Hapus Booking"
-        itemName={
-          deleteTarget
-            ? `${deleteTarget.kelompok_nama} — ${deleteTarget.tanggal} (${deleteTarget.slot_nama})`
-            : ""
-        }
-        description="Booking dan seluruh relasi kating pendamping akan dihapus permanen. Aksi ini tidak dapat dibatalkan."
-        onConfirm={handleDelete}
-        isPending={isDeleting}
-      />
+      {/* Confirm Delete Dialog — only in admin mode */}
+      {!readOnly && (
+        <ConfirmDeleteDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+          title="Hapus Booking"
+          itemName={
+            deleteTarget
+              ? `${deleteTarget.kelompok_nama} — ${deleteTarget.tanggal} (${deleteTarget.slot_nama})`
+              : ""
+          }
+          description="Booking dan seluruh relasi kating pendamping akan dihapus permanen. Aksi ini tidak dapat dibatalkan."
+          onConfirm={handleDelete}
+          isPending={isDeleting}
+        />
+      )}
     </div>
   );
 }

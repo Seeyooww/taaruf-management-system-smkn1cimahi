@@ -235,7 +235,8 @@ export async function saveBookingProgress(
         anggota_id: sub.substituteId,
         hadir: true,
         is_substitute: true,
-        replaces_anggota_id: sub.replacesId,
+        // Guard: jangan pernah kirim string kosong / placeholder ke kolom UUID
+        replaces_anggota_id: sub.replacesId || null,
       })),
     ];
 
@@ -294,6 +295,67 @@ export async function saveBookingProgress(
           return { success: false, message: `Gagal menyimpan progress: ${progressError.message}` };
         }
       }
+    }
+
+    // ── Check & set completed_at for Anggota & Kelompok if targets reached ──────
+    try {
+      const adminClient = createSupabaseAdminClient();
+      const settings = await fetchEventSettings();
+      const targetKating = settings.target_kating || 5;
+      const nowIso = new Date().toISOString();
+
+      if (participantIdsForProgress.length > 0) {
+        for (const anggotaId of participantIdsForProgress) {
+          const { count } = await adminClient
+            .from("progress")
+            .select("id", { count: "exact", head: true })
+            .eq("anggota_id", anggotaId);
+
+          if (count !== null && count >= targetKating) {
+            await adminClient
+              .from("anggota")
+              .update({ completed_at: nowIso })
+              .eq("id", anggotaId)
+              .is("completed_at", null);
+          }
+        }
+      }
+
+      const bookingKelompokId = (bookingData as any)?.kelompok_id;
+      if (bookingKelompokId) {
+        const { data: groupAnggota } = await adminClient
+          .from("anggota")
+          .select("id")
+          .eq("kelompok_id", bookingKelompokId)
+          .eq("aktif", true);
+
+        if (groupAnggota && groupAnggota.length > 0) {
+          const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
+          const { data: groupProgressRows } = await adminClient
+            .from("progress")
+            .select("anggota_id")
+            .in("anggota_id", groupAnggotaIds);
+
+          const countMap = new Map<string, number>();
+          (groupProgressRows ?? []).forEach((r: any) => {
+            countMap.set(r.anggota_id, (countMap.get(r.anggota_id) || 0) + 1);
+          });
+
+          const allMembersDone = groupAnggota.every(
+            (a: any) => (countMap.get(a.id) || 0) >= targetKating
+          );
+
+          if (allMembersDone) {
+            await adminClient
+              .from("kelompok")
+              .update({ completed_at: nowIso })
+              .eq("id", bookingKelompokId)
+              .is("completed_at", null);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("[saveBookingProgress] error updating completed_at:", err?.message);
     }
 
     // ── Update booking status to Selesai ONLY AFTER progress is saved ──────────

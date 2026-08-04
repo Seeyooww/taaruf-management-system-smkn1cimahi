@@ -132,6 +132,18 @@ export const DASHBOARD_NAVIGATION: Record<
       category: "Utama",
     },
     {
+      href: "/kelompok/leaderboard",
+      label: "Leaderboard",
+      description: "Peringkat pencapaian kelompok & individu.",
+      category: "Operasional",
+    },
+    {
+      href: "/kelompok/monitoring",
+      label: "Monitoring Booking",
+      description: "Pantau seluruh jadwal booking & ketersediaan kating.",
+      category: "Operasional",
+    },
+    {
       href: "/kelompok/booking",
       label: "Booking Saya",
       description: "Pengajuan dan riwayat jadwal sesi Taaruf.",

@@ -261,7 +261,8 @@ export function BookingCompleteDialog({
     const absentOriginalIds = Array.from(absentIds);
     const substituteEntries: SubstituteEntry[] = substitutes.map((s) => ({
       substituteId: s.substituteId,
-      replacesId: s.replacesId || "",
+      // Peserta tambahan (bukan pengganti) tidak memiliki replacesId → kirim null, BUKAN string kosong
+      replacesId: s.replacesId || null,
     }));
 
     if (presentOriginalIds.length + substituteEntries.length === 0) {

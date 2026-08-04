@@ -517,6 +517,37 @@ export function saveMockBookingProgress(bookingId: string, presentAnggotaIds: st
     });
   });
 
+  // Check & set completed_at for Anggota & Kelompok if targets reached for the first time
+  const nowIso = new Date().toISOString();
+  const targetKating = mockSettings.target_kating || 5;
+
+  presentAnggotaIds.forEach((anggotaId) => {
+    const ang = mockAnggotaList.find((a) => a.id === anggotaId);
+    if (ang && !ang.completed_at) {
+      const metCount = mockProgressList.filter((p) => p.anggota_id === anggotaId).length;
+      if (metCount >= targetKating) {
+        ang.completed_at = nowIso;
+      }
+    }
+  });
+
+  if (booking.kelompok_id) {
+    const kel = mockKelompokList.find((k) => k.id === booking.kelompok_id);
+    if (kel && !kel.completed_at) {
+      const groupAnggota = mockAnggotaList.filter((a) => a.kelompok_id === kel.id && a.aktif);
+      const allDone =
+        groupAnggota.length > 0 &&
+        groupAnggota.every((a) => {
+          const metCount = mockProgressList.filter((p) => p.anggota_id === a.id).length;
+          return metCount >= targetKating;
+        });
+
+      if (allDone) {
+        kel.completed_at = nowIso;
+      }
+    }
+  }
+
   return {
     success: true,
     message: `Progress berhasil dihitung! ${presentAnggotaIds.length} anggota hadir mendapatkan penambahan progress (${newProgressCount} entri baru).`,

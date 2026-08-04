@@ -21,6 +21,8 @@ import {
   MessageSquare,
   Settings,
   Shield,
+  Eye,
+  Trophy,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -36,6 +38,8 @@ interface AppSidebarProps {
 }
 
 function getNavIcon(href: string) {
+  if (href.includes("/leaderboard")) return Trophy;
+  if (href.includes("/monitoring")) return Eye;
   if (href.includes("/admin/panduan")) return BookOpen;
   if (href.includes("/admin/tentang")) return Info;
   if (href.includes("/admin/laporan/lpj")) return Award;

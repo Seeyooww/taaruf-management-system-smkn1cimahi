@@ -26,6 +26,7 @@ export interface Kelompok {
   username: string;
   password_hint?: string | null;
   created_at: string;
+  completed_at?: string | null;
   total_anggota?: number;
 }
 
@@ -36,7 +37,38 @@ export interface Anggota {
   jenis_kelamin: Gender;
   aktif: boolean;
   created_at: string;
+  completed_at?: string | null;
   kelompok_nama?: string;
+}
+
+export interface KelompokLeaderboardItem {
+  kelompok_id: string;
+  nomor_kelompok: number;
+  kelompok_nama: string;
+  kelas: string;
+  total_anggota: number;
+  total_progress: number;
+  total_target: number;
+  persentase: number;
+  anggota_selesai: number;
+  target_tercapai: boolean;
+  completed_at: string | null;
+  rank: number;
+}
+
+export interface IndividuLeaderboardItem {
+  anggota_id: string;
+  nama: string;
+  jenis_kelamin: Gender;
+  kelompok_id: string;
+  kelompok_nama: string;
+  kelas: string;
+  total_kating_met: number;
+  target_kating: number;
+  persentase: number;
+  target_tercapai: boolean;
+  completed_at: string | null;
+  rank: number;
 }
 
 export interface Kating {
@@ -97,10 +129,10 @@ export interface BookingParticipant {
   replaces_anggota_id: string | null;  // ID anggota asli yang digantikan
 }
 
-/** Satu pasangan substitusi: pengganti → yang digantikan */
+/** Satu pasangan substitusi: pengganti → yang digantikan (null jika peserta tambahan tanpa menggantikan siapa pun) */
 export interface SubstituteEntry {
-  substituteId: string;  // ID Fajar (pengganti)
-  replacesId: string;    // ID Eka (yang digantikan)
+  substituteId: string;       // ID pengganti / peserta tambahan
+  replacesId: string | null;  // ID yang digantikan (null jika peserta tambahan)
 }
 
 export interface ProgressRecord {
