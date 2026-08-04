@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Code2, Info, ShieldCheck, Sparkles } from "lucide-react";
+import { Code2, Github, Info, Instagram, ShieldCheck, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -21,7 +21,7 @@ export function TentangView() {
         </p>
         <div className="flex justify-center gap-2 pt-2">
           <Badge variant="outline" className="border-primary/40 text-primary">
-            Next.js 14 App Router
+            Next.js App Router
           </Badge>
           <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
             TailwindCSS & Glassmorphism
@@ -44,7 +44,7 @@ export function TentangView() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-2xl border bg-card p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="space-y-1 text-center sm:text-left">
+            <div className="space-y-1.5 text-center sm:text-left">
               <div className="text-xs text-muted-foreground uppercase font-semibold tracking-wider">
                 Lead System Architect & Fullstack Developer
               </div>
@@ -52,10 +52,32 @@ export function TentangView() {
                 Seo Daffaa Pramudya
               </div>
               <div className="text-xs text-muted-foreground">
-                Siswa / Alumni SMKN 1 Cimahi
+                SMKN 1 Cimahi
+              </div>
+
+              {/* Social Links */}
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-2">
+                <a
+                  href="https://instagram.com/Seeyooww"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border border-pink-500/30 bg-pink-500/10 text-pink-600 dark:text-pink-400 hover:bg-pink-500/20 transition-colors"
+                >
+                  <Instagram className="size-3.5" />
+                  @Seeyooww
+                </a>
+                <a
+                  href="https://github.com/Seeyooww"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border border-foreground/20 bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  <Github className="size-3.5" />
+                  Seeyooww
+                </a>
               </div>
             </div>
-            <Badge variant="default" className="bg-primary px-4 py-1 text-xs">
+            <Badge variant="default" className="bg-primary px-4 py-1 text-xs shrink-0">
               Developer Official
             </Badge>
           </div>

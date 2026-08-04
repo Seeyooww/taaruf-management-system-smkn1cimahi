@@ -355,6 +355,19 @@ export async function updateBookingStatus(id: string, status: BookingStatus) {
       };
     }
 
+    if (status === "Dibatalkan") {
+      try {
+        await recordActivityLog(
+          "Admin",
+          "admin",
+          "Booking Dibatalkan",
+          `Booking ID ${id} telah dibatalkan oleh Admin.`
+        );
+      } catch (e) {
+        console.error("[updateBookingStatus] Activity log error:", e);
+      }
+    }
+
     return { success: true, message: `Status booking diperbarui menjadi "${status}".` };
   }
 

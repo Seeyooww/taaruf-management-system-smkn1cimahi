@@ -2,12 +2,20 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Activity, CalendarCheck, CalendarDays, Check, ListFilter, Search, Trash2, X } from "lucide-react";
+import { Ban, CalendarCheck, CalendarDays, Check, ListFilter, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -65,6 +73,10 @@ export function AdminBookingView({
   const [deleteTarget, setDeleteTarget] = React.useState<BookingWithDetails | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  // Cancel state
+  const [cancelTarget, setCancelTarget] = React.useState<BookingWithDetails | null>(null);
+  const [isCanceling, setIsCanceling] = React.useState(false);
+
   // Derive unique kating list for dropdown filter
   const allKatingList = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -108,6 +120,10 @@ export function AdminBookingView({
       setIsProgressOpen(true);
       return;
     }
+    if (newStatus === "Dibatalkan") {
+      setCancelTarget(bookingItem);
+      return;
+    }
 
     startTransition(async () => {
       const res = await updateBookingStatusAction(bookingItem.id, newStatus);
@@ -116,6 +132,26 @@ export function AdminBookingView({
         setData((prev) =>
           prev.map((b) => (b.id === bookingItem.id ? { ...b, status: newStatus } : b))
         );
+      } else {
+        toast.error("❌ " + res.message);
+      }
+    });
+  };
+
+  const handleConfirmCancel = () => {
+    if (!cancelTarget) return;
+    setIsCanceling(true);
+    startTransition(async () => {
+      const res = await updateBookingStatusAction(cancelTarget.id, "Dibatalkan");
+      setIsCanceling(false);
+      const targetId = cancelTarget.id;
+      setCancelTarget(null);
+      if (res.success) {
+        toast.success("🚫 Booking berhasil dibatalkan.");
+        setData((prev) =>
+          prev.map((b) => (b.id === targetId ? { ...b, status: "Dibatalkan" } : b))
+        );
+        router.refresh();
       } else {
         toast.error("❌ " + res.message);
       }
@@ -159,7 +195,11 @@ export function AdminBookingView({
       case "Ditolak":
         return <Badge variant="destructive">Ditolak</Badge>;
       case "Dibatalkan":
-        return <Badge variant="destructive">Dibatalkan</Badge>;
+        return (
+          <Badge variant="outline" className="border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-500/10 font-semibold gap-1">
+            <Ban className="size-3" /> Dibatalkan
+          </Badge>
+        );
       case "Selesai":
         return <Badge variant="secondary">Selesai</Badge>;
       default:
@@ -410,14 +450,37 @@ export function AdminBookingView({
                               )}
 
                               {item.status === "Disetujui" && (
-                                <Button
-                                  size="sm"
-                                  disabled={isPending}
-                                  onClick={() => handleUpdateStatus(item, "Selesai")}
-                                  className="h-8 min-h-[32px] px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white gap-1"
-                                >
-                                  <Activity className="size-3" /> Presensi & Selesai
-                                </Button>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    disabled={isPending}
+                                    onClick={() => handleUpdateStatus(item, "Selesai")}
+                                    className="h-8 min-h-[32px] px-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold"
+                                    title="Konfirmasi Presensi & Simpan Progress"
+                                  >
+                                    <Check className="size-3" /> Berhasil
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isPending}
+                                    onClick={() => handleUpdateStatus(item, "Dibatalkan")}
+                                    className="h-8 min-h-[32px] px-2 text-xs border-slate-400/40 text-slate-700 dark:text-slate-300 hover:bg-slate-500/10 gap-1 font-semibold"
+                                    title="Batalkan Booking ini"
+                                  >
+                                    <Ban className="size-3 text-slate-500" /> Dibatalkan
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    disabled={isPending}
+                                    onClick={() => handleUpdateStatus(item, "Ditolak")}
+                                    className="h-8 min-h-[32px] px-2 text-xs gap-1 font-semibold"
+                                    title="Tolak Booking ini"
+                                  >
+                                    <X className="size-3" /> Tidak Berhasil
+                                  </Button>
+                                </div>
                               )}
 
                               <select
@@ -523,6 +586,52 @@ export function AdminBookingView({
           onConfirm={handleDelete}
           isPending={isDeleting}
         />
+      )}
+
+      {/* Confirm Cancel Dialog — only in admin mode */}
+      {!readOnly && (
+        <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <Ban className="size-5 shrink-0" />
+                Membatalkan Booking
+              </DialogTitle>
+              <DialogDescription className="text-xs space-y-2 pt-1 text-muted-foreground">
+                <span>Yakin ingin membatalkan booking ini?</span>
+                {cancelTarget && (
+                  <div className="p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-foreground font-semibold text-xs">
+                    {cancelTarget.kelompok_nama} — {cancelTarget.tanggal} ({cancelTarget.slot_nama})
+                  </div>
+                )}
+                <span className="text-[11px] text-muted-foreground block">
+                  Booking akan disimpan sebagai riwayat tetapi tidak akan menghasilkan progress.
+                </span>
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCancelTarget(null)}
+                disabled={isCanceling}
+                className="text-xs"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleConfirmCancel}
+                disabled={isCanceling}
+                className="text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white gap-1"
+              >
+                {isCanceling ? "Membatalkan..." : <><Ban className="size-3.5" /> Ya, Batalkan Booking</>}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

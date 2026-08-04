@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  Ban,
   CalendarCheck,
   CalendarDays,
   CheckCircle,
@@ -158,7 +159,11 @@ export function KelompokBookingView({
       case "Ditolak":
         return <Badge variant="destructive">Ditolak</Badge>;
       case "Dibatalkan":
-        return <Badge variant="destructive">Dibatalkan</Badge>;
+        return (
+          <Badge variant="outline" className="border-slate-500/30 text-slate-600 dark:text-slate-400 bg-slate-500/10 font-semibold gap-1">
+            <Ban className="size-3" /> Dibatalkan
+          </Badge>
+        );
       case "Selesai":
         return <Badge variant="secondary">Selesai ✓</Badge>;
       case "Tidak Dihitung":
