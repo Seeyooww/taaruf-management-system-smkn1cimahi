@@ -7,6 +7,10 @@ import { getSettingsAction } from "@/services/settings.actions";
 import { getSlotAction } from "@/services/slot.actions";
 import { AdminBookingView } from "@/components/admin/admin-booking-view";
 
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
 export const dynamic = "force-dynamic";
 
 export const metadata = {
@@ -28,13 +32,28 @@ export default async function KelompokMonitoringPage() {
   ]);
 
   return (
-    <AdminBookingView
-      initialBookings={bookingList}
-      kelompokList={kelompokList}
-      slotList={slotList}
-      allAnggotaList={allAnggotaList}
-      settings={settings}
-      readOnly={true}
-    />
+    <div className="space-y-4">
+      <div>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <Link href="/kelompok/dashboard">
+            <ArrowLeft className="mr-1.5 size-3.5" /> Kembali ke Dashboard Kelompok
+          </Link>
+        </Button>
+      </div>
+
+      <AdminBookingView
+        initialBookings={bookingList}
+        kelompokList={kelompokList}
+        slotList={slotList}
+        allAnggotaList={allAnggotaList}
+        settings={settings}
+        readOnly={true}
+      />
+    </div>
   );
 }

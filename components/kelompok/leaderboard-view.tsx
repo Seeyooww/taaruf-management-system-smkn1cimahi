@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Award, Lock, Minus, Search, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Award, Lock, Minus, Search, Target, TrendingDown, TrendingUp, Trophy, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -157,7 +158,21 @@ export function LeaderboardView({
   }, [individuLeaderboard, individuSearch]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Back Button */}
+      <div>
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <Link href="/kelompok/dashboard">
+            <ArrowLeft className="mr-1.5 size-3.5" /> Kembali ke Dashboard Kelompok
+          </Link>
+        </Button>
+      </div>
+
       {/* Header Banner */}
       <div className="rounded-2xl border bg-gradient-to-r from-amber-500/10 via-primary/5 to-transparent p-4 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

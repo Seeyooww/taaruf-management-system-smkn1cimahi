@@ -235,7 +235,7 @@ export function KelompokBookingView({
             <span className="text-[10px] text-muted-foreground self-center">Setelah taaruf:</span>
             <Button
               size="sm"
-              className="h-8 min-h-[32px] text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="h-8 min-h-[32px] text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
               disabled={isLoading}
               onClick={() => {
                 setCompleteBooking(item);
@@ -248,7 +248,17 @@ export function KelompokBookingView({
             <Button
               size="sm"
               variant="outline"
-              className="h-8 min-h-[32px] text-xs gap-1 text-muted-foreground"
+              className="h-8 min-h-[32px] text-xs gap-1 text-slate-700 dark:text-slate-300 border-slate-400/40 hover:bg-slate-500/10 font-semibold"
+              disabled={isLoading}
+              onClick={() => handleUpdateStatus(item.id, "Dibatalkan")}
+            >
+              <Ban className="size-3 text-slate-500" />
+              Dibatalkan
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 min-h-[32px] text-xs gap-1 text-rose-600 border-rose-500/30 hover:bg-rose-500/10 font-semibold"
               disabled={isLoading}
               onClick={() => handleUpdateStatus(item.id, "Tidak Dihitung")}
             >
