@@ -36,10 +36,9 @@ import type {
   EventSettings,
   Kating,
   Kelompok,
-  LiveSessionItem,
 } from "@/types/database";
 import type { ActivityLog } from "@/types/activity";
-import type { AnalyticsData } from "@/services/reporting.service";
+import type { AnalyticsData, LiveActiveSessionItem } from "@/services/reporting.service";
 
 interface AdminDashboardViewProps {
   sessionProfile: { displayName?: string | null; username?: string | null } | null;
@@ -50,7 +49,7 @@ interface AdminDashboardViewProps {
   bookingList: BookingWithDetails[];
   progressSummaries: AnggotaProgressSummary[];
   analyticsData: AnalyticsData;
-  liveSessions: LiveSessionItem[];
+  liveSessions: LiveActiveSessionItem[];
   activityLogs: ActivityLog[];
 }
 
