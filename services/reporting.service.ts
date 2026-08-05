@@ -152,10 +152,8 @@ export async function fetchLaporanKelompok(filters?: {
 
       const { data: bookingData } = await bookingQuery;
 
-      // Fetch progress records to compute per-anggota met counts
-      const { data: progressData } = await adminClient
-        .from("progress")
-        .select("anggota_id, kating_id");
+      // Fetch progress records to compute per-anggota met counts (paginated)
+      const progressData = await fetchAllProgressSimple(adminClient);
 
       if (kelompokData) {
         return kelompokData.map((k: any) => {
@@ -280,12 +278,9 @@ export async function fetchLaporanAnggota(filters?: {
       const { data: anggotaData } = await anggotaQuery;
       if (!anggotaData) return [];
 
-      // Fetch all progress records for these anggota in bulk
+      // Fetch all progress records for these anggota in bulk (paginated)
       const anggotaIds = anggotaData.map((a: any) => a.id);
-      const { data: progressData } = await adminClient
-        .from("progress")
-        .select("anggota_id, kating_id, booking_id, kating:kating_id(nama, jenis_kelamin), booking:booking_id(tanggal, slot:slot_id(nama_slot))")
-        .in("anggota_id", anggotaIds);
+      const progressData = await fetchAllProgressWithDetails(adminClient, anggotaIds);
 
       // Build progress map
       const progressByAnggota = new Map<string, any[]>();
@@ -411,10 +406,8 @@ export async function fetchLaporanKating(filters?: {
         .from("booking_kating")
         .select("booking_id, kating_id");
 
-      // Fetch progress to count jumlah_ditaarufi per kating
-      const { data: progressData } = await adminClient
-        .from("progress")
-        .select("kating_id, anggota_id");
+      // Fetch progress to count jumlah_ditaarufi per kating (paginated)
+      const progressData = await fetchAllProgressSimple(adminClient);
 
       // Build map: kating_id -> [booking_id]
       const katingBookingsMap = new Map<string, string[]>();
@@ -554,11 +547,11 @@ export async function fetchAnalyticsData(): Promise<AnalyticsData> {
     try {
       const adminClient = createSupabaseAdminClient();
 
-      const [{ data: bookingData }, { data: slotData }, { data: anggotaData }, { data: progressData }] = await Promise.all([
+      const [{ data: bookingData }, { data: slotData }, { data: anggotaData }, progressData] = await Promise.all([
         adminClient.from("booking").select("tanggal, slot_id, status"),
         adminClient.from("slot_waktu").select("id, nama_slot"),
         adminClient.from("anggota").select("id"),
-        adminClient.from("progress").select("anggota_id, kating_id"),
+        fetchAllProgressSimple(adminClient),
       ]);
 
       const bookingList = bookingData ?? [];
@@ -714,14 +707,14 @@ export async function fetchLPJSummary(): Promise<LPJSummaryData> {
         { count: totalAnggota },
         { count: totalKating },
         { data: bookingData },
-        { data: progressData },
+        progressData,
         { data: anggotaData },
       ] = await Promise.all([
         adminClient.from("kelompok").select("id", { count: "exact", head: true }),
         adminClient.from("anggota").select("id", { count: "exact", head: true }),
         adminClient.from("kating").select("id", { count: "exact", head: true }),
         adminClient.from("booking").select("status"),
-        adminClient.from("progress").select("anggota_id, kating_id"),
+        fetchAllProgressSimple(adminClient),
         adminClient.from("anggota").select("id"),
       ]);
 
@@ -833,3 +826,78 @@ export async function fetchLiveActiveSessions(): Promise<LiveActiveSessionItem[]
       jam: `${b.jam_mulai} - ${b.jam_selesai} WIB`,
     }));
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGINATED PROGRESS QUERY HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchAllProgressSimple(
+  client: any,
+  anggotaIds?: string[]
+): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = client
+      .from("progress")
+      .select("anggota_id, kating_id")
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (anggotaIds && anggotaIds.length > 0) {
+      query = query.in("anggota_id", anggotaIds);
+    }
+
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allRows;
+}
+
+async function fetchAllProgressWithDetails(
+  client: any,
+  anggotaIds: string[]
+): Promise<any[]> {
+  if (!anggotaIds || anggotaIds.length === 0) return [];
+
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await client
+      .from("progress")
+      .select(
+        "anggota_id, kating_id, booking_id, kating:kating_id(nama, jenis_kelamin), booking:booking_id(tanggal, slot:slot_id(nama_slot))"
+      )
+      .in("anggota_id", anggotaIds)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allRows;
+}
+

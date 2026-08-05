@@ -114,6 +114,12 @@ export const DASHBOARD_NAVIGATION: Record<
       category: "Pengaturan",
     },
     {
+      href: "/admin/pengaturan/versi",
+      label: "Manajemen Versi",
+      description: "Kelola versi aplikasi & changelog rilis.",
+      category: "Pengaturan",
+    },
+    {
       href: "/admin/panduan",
       label: "Panduan System",
       description: "Petunjuk operasional Admin & Kelompok.",

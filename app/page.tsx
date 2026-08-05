@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Bell, Calendar, Shield, Sparkles, Users } from "lucide-react";
 
+import { AppFooter } from "@/components/layout/app-footer";
 import { ThemeSwitch } from "@/components/common/theme-switch";
 import { CountdownTimer } from "@/components/common/countdown-timer";
 import { Button } from "@/components/ui/button";
@@ -129,16 +130,7 @@ export default async function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border py-6 sm:py-8 bg-card text-card-foreground">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground text-center sm:text-left">
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-            <span className="font-semibold text-foreground">{APP_SHORT_NAME}</span>
-            <span>&bull;</span>
-            <span>SMKN 1 Cimahi &copy; {new Date().getFullYear()}</span>
-          </div>
-          <p>Phase 2A Foundation Application</p>
-        </div>
-      </footer>
+      <AppFooter />
     </div>
   );
 }

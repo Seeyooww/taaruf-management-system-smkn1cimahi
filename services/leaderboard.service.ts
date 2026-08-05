@@ -39,13 +39,10 @@ export async function fetchKelompokLeaderboard(): Promise<KelompokLeaderboardIte
 
     const anggotaIds = (anggotaList ?? []).map((a: any) => a.id);
 
-    // 3. Fetch progress for these anggota
+    // 3. Fetch progress for these anggota using paginated query
     const progressCountMap = new Map<string, number>();
     if (anggotaIds.length > 0) {
-      const { data: progressRows } = await supabase
-        .from("progress")
-        .select("anggota_id")
-        .in("anggota_id", anggotaIds);
+      const progressRows = await fetchAllProgressRows(supabase, anggotaIds);
 
       (progressRows ?? []).forEach((p: any) => {
         progressCountMap.set(p.anggota_id, (progressCountMap.get(p.anggota_id) || 0) + 1);
@@ -127,6 +124,42 @@ export async function fetchKelompokLeaderboard(): Promise<KelompokLeaderboardIte
   return getMockKelompokLeaderboard(targetKating);
 }
 
+/**
+ * Helper to fetch ALL progress rows for given anggota_ids without hitting PostgREST 1000-row cap.
+ */
+async function fetchAllProgressRows(
+  supabaseClient: any,
+  anggotaIds: string[]
+): Promise<{ anggota_id: string }[]> {
+  if (!anggotaIds || anggotaIds.length === 0) return [];
+
+  const PAGE_SIZE = 1000;
+  let allRows: { anggota_id: string }[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabaseClient
+      .from("progress")
+      .select("anggota_id")
+      .in("anggota_id", anggotaIds)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allRows;
+}
+
 export async function fetchIndividuLeaderboard(): Promise<IndividuLeaderboardItem[]> {
   const settings = await fetchEventSettings();
   const targetKating = settings.target_kating || 5;
@@ -146,13 +179,10 @@ export async function fetchIndividuLeaderboard(): Promise<IndividuLeaderboardIte
 
     const anggotaIds = anggotaList.map((a: any) => a.id);
 
-    // Fetch progress for all active anggota
+    // Fetch progress for all active anggota using paginated query
     const progressCountMap = new Map<string, number>();
     if (anggotaIds.length > 0) {
-      const { data: progressRows } = await supabase
-        .from("progress")
-        .select("anggota_id")
-        .in("anggota_id", anggotaIds);
+      const progressRows = await fetchAllProgressRows(supabase, anggotaIds);
 
       (progressRows ?? []).forEach((p: any) => {
         progressCountMap.set(p.anggota_id, (progressCountMap.get(p.anggota_id) || 0) + 1);

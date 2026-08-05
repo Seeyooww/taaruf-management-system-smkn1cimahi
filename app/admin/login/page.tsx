@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Shield } from "lucide-react";
 
+import { AppFooter } from "@/components/layout/app-footer";
 import { ThemeSwitch } from "@/components/common/theme-switch";
 import { AdminLoginForm } from "@/components/forms/admin-login-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +54,8 @@ export default function AdminLoginPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AppFooter className="mt-8 border-t-0 bg-transparent" />
     </div>
   );
 }

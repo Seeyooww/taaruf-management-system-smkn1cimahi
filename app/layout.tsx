@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 
 import { ThemeProvider } from "@/components/common/theme-provider";
+import { VersionProvider } from "@/components/version/version-provider";
+import { fetchAllVersions, fetchCurrentVersionInfo } from "@/services/version.service";
 import "./globals.css";
 
 const inter = Inter({
@@ -50,17 +52,27 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [currentVersion, allVersions] = await Promise.all([
+    fetchCurrentVersionInfo(),
+    fetchAllVersions(),
+  ]);
+
   return (
     <html lang="id" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider>
-          {children}
-          <Toaster position="top-right" richColors />
+          <VersionProvider
+            initialCurrentVersion={currentVersion}
+            initialAllVersions={allVersions}
+          >
+            {children}
+            <Toaster position="top-right" richColors />
+          </VersionProvider>
         </ThemeProvider>
       </body>
     </html>

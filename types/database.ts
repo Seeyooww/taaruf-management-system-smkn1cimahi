@@ -238,3 +238,29 @@ export interface ProgressEstimateResult {
   totalIncrease: number;
   totalUnchanged: number;
 }
+
+export type ChangelogCategory = "FEATURE" | "IMPROVEMENT" | "BUGFIX" | "SECURITY" | "BREAKING";
+
+export interface SystemVersion {
+  id: string;
+  version: string;
+  build: string;
+  release_date: string;
+  status: "Stable" | "Beta" | "RC" | "Deprecated";
+  current: boolean;
+  created_at: string;
+  changelogs?: SystemChangelog[];
+}
+
+export interface SystemChangelog {
+  id: string;
+  version_id?: string;
+  version: string;
+  category: ChangelogCategory;
+  title: string;
+  description?: string;
+  important: boolean;
+  order_index: number;
+  created_at: string;
+}
+

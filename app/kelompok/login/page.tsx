@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, Users } from "lucide-react";
 
+import { AppFooter } from "@/components/layout/app-footer";
 import { ThemeSwitch } from "@/components/common/theme-switch";
 import { KelompokLoginForm } from "@/components/forms/kelompok-login-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +54,8 @@ export default function KelompokLoginPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AppFooter className="mt-8 border-t-0 bg-transparent" />
     </div>
   );
 }

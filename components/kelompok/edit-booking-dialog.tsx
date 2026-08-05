@@ -119,7 +119,10 @@ export function EditBookingDialog({
   React.useEffect(() => {
     if (booking && open) {
       setTanggal(booking.tanggal || settings.tanggal_mulai || "");
-      const foundSlot = slotList.find((s) => s.id === booking.slot_id) || slotList[0] || null;
+      // SAFE FIX: Jangan pernah fallback ke slotList[0].
+      // Jika slot_id booking tidak ditemukan di slotList (mis. slot dinonaktifkan),
+      // set null dan tampilkan warning — JANGAN ganti slot secara diam-diam.
+      const foundSlot = slotList.find((s) => s.id === booking.slot_id) ?? null;
       setSelectedSlot(foundSlot);
       setSelectedKatingIds(new Set((booking.kating_list ?? []).map((k) => k.id)));
       setCatatan(booking.catatan || "");
@@ -489,20 +492,34 @@ export function EditBookingDialog({
                 <Label htmlFor="edit-slot" className="text-xs font-semibold flex items-center gap-1">
                   <Clock className="size-3.5 text-primary" /> Slot Waktu
                 </Label>
+                {/* Warning jika slot booking saat ini tidak ditemukan di slotList */}
+                {booking && !slotList.some((s) => s.id === booking.slot_id) && (
+                  <p className="text-[10px] text-rose-600 font-semibold flex items-center gap-1 mb-1">
+                    <AlertCircle className="size-3 shrink-0" />
+                    Slot waktu asli booking ini tidak ditemukan. Silakan pilih slot baru secara manual.
+                  </p>
+                )}
                 <select
                   id="edit-slot"
                   value={selectedSlot?.id || ""}
                   onChange={(e) => {
+                    // Cari di seluruh slotList (aktif maupun tidak aktif)
                     const s = slotList.find((sl) => sl.id === e.target.value);
                     if (s) setSelectedSlot(s);
                   }}
                   className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
-                  {slotList.filter((s) => s.aktif).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nama_slot} ({s.jam_mulai} - {s.jam_selesai} WIB)
-                    </option>
-                  ))}
+                  {/* SAFE FIX: Selalu tampilkan slot booking saat ini meskipun tidak aktif,
+                      sehingga slot asli selalu bisa ditemukan dan tidak terganti diam-diam. */}
+                  {slotList
+                    .filter((s) => s.aktif || s.id === booking?.slot_id)
+                    .map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nama_slot} ({s.jam_mulai} - {s.jam_selesai} WIB)
+                        {!s.aktif ? " ⚠️ (Tidak Aktif)" : ""}
+                      </option>
+                    ))
+                  }
                 </select>
               </div>
             </div>

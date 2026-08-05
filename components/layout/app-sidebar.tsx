@@ -27,7 +27,8 @@ import {
   Users,
 } from "lucide-react";
 
-import { APP_NAME, APP_SHORT_NAME, APP_VERSION, DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { useVersion } from "@/components/version/version-provider";
+import { APP_NAME, APP_SHORT_NAME, DASHBOARD_NAVIGATION } from "@/lib/constants";
 import { cn, getRoleLabel } from "@/lib/utils";
 import type { UserRole } from "@/types/auth";
 
@@ -58,12 +59,15 @@ function getNavIcon(href: string) {
   if (href.includes("/pengaturan/whatsapp")) return MessageSquare;
   if (href.includes("/pengaturan/pengumuman")) return Bell;
   if (href.includes("/pengaturan/backup")) return Database;
+  if (href.includes("/pengaturan/versi")) return History;
   return Settings;
 }
 
 export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
   const pathname = usePathname();
   const roleLabel = getRoleLabel(role);
+  const { currentVersion, openChangelogModal } = useVersion();
+  const verStr = currentVersion?.version || "v1.4.2";
 
   // Group navigation items by category
   const categories = React.useMemo(() => {
@@ -142,11 +146,23 @@ export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
 
       {/* Sidebar Footer */}
       <div className="p-4 border-t border-border bg-muted/20">
-        <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">SMKN 1 Cimahi</p>
-          <p className="text-[11px] mt-0.5">Taaruf Management System v{APP_VERSION}</p>
-        </div>
+        <button
+          type="button"
+          onClick={openChangelogModal}
+          className="w-full text-left rounded-lg bg-muted/60 hover:bg-muted p-3 text-xs text-muted-foreground transition-all cursor-pointer group border border-border/40"
+        >
+          <p className="font-medium text-foreground flex items-center justify-between">
+            <span>SMKN 1 Cimahi</span>
+            <span className="text-[10px] font-mono text-primary font-bold bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+              {verStr}
+            </span>
+          </p>
+          <p className="text-[11px] mt-1 text-muted-foreground group-hover:text-primary transition-colors flex items-center gap-1">
+            <FileText className="size-3 text-primary" /> Lihat Changelog
+          </p>
+        </button>
       </div>
     </aside>
   );
 }
+

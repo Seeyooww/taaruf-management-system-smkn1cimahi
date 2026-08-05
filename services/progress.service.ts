@@ -55,11 +55,8 @@ export async function fetchAnggotaProgressSummaries(
 
     const anggotaIds = anggotaList.map((a: any) => a.id);
 
-    // ── Query 2: all progress records for these anggota ──────────────────────
-    const { data: allProgress } = await supabase
-      .from("progress")
-      .select("anggota_id, kating_id, booking_id, kating:kating_id(nama, jenis_kelamin), booking:booking_id(tanggal, slot:slot_id(nama_slot))")
-      .in("anggota_id", anggotaIds);
+    // ── Query 2: all progress records for these anggota (paginated) ──────────
+    const allProgress = await fetchAllProgressDetails(supabase, anggotaIds);
 
     // ── Query 3: all substitution records (as substitute) ─────────────────────
     const { data: allAsSubstitute } = await supabase
@@ -334,10 +331,7 @@ export async function saveBookingProgress(
 
         if (groupAnggota && groupAnggota.length > 0) {
           const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
-          const { data: groupProgressRows } = await adminClient
-            .from("progress")
-            .select("anggota_id")
-            .in("anggota_id", groupAnggotaIds);
+          const groupProgressRows = await fetchAllProgressSimpleRows(adminClient, groupAnggotaIds);
 
           const countMap = new Map<string, number>();
           (groupProgressRows ?? []).forEach((r: any) => {
@@ -493,10 +487,7 @@ export async function rollbackBookingProgress(
 
       if (groupAnggota && groupAnggota.length > 0) {
         const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
-        const { data: groupProgressRows } = await adminClient
-          .from("progress")
-          .select("anggota_id")
-          .in("anggota_id", groupAnggotaIds);
+        const groupProgressRows = await fetchAllProgressSimpleRows(adminClient, groupAnggotaIds);
 
         const countMap = new Map<string, number>();
         (groupProgressRows ?? []).forEach((r: any) => {
@@ -635,10 +626,7 @@ export async function deleteKatingProgressByBooking(
 
     if (groupAnggota && groupAnggota.length > 0) {
       const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
-      const { data: groupProgressRows } = await adminClient
-        .from("progress")
-        .select("anggota_id")
-        .in("anggota_id", groupAnggotaIds);
+      const groupProgressRows = await fetchAllProgressSimpleRows(adminClient, groupAnggotaIds);
 
       const countMap = new Map<string, number>();
       (groupProgressRows ?? []).forEach((r: any) => {
@@ -1038,10 +1026,7 @@ async function reevaluateCompletedAt(anggotaId: string, kelompokId: string) {
 
     if (groupAnggota && groupAnggota.length > 0) {
       const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
-      const { data: groupProgressRows } = await adminClient
-        .from("progress")
-        .select("anggota_id")
-        .in("anggota_id", groupAnggotaIds);
+      const groupProgressRows = await fetchAllProgressSimpleRows(adminClient, groupAnggotaIds);
 
       const countMap = new Map<string, number>();
       (groupProgressRows ?? []).forEach((r: any) => {
@@ -1067,5 +1052,75 @@ async function reevaluateCompletedAt(anggotaId: string, kelompokId: string) {
       }
     }
   }
+}
+
+// ── Paginated Progress Query Helpers ─────────────────────────────────────────
+
+async function fetchAllProgressSimpleRows(
+  supabaseClient: any,
+  anggotaIds: string[]
+): Promise<{ anggota_id: string }[]> {
+  if (!anggotaIds || anggotaIds.length === 0) return [];
+
+  const PAGE_SIZE = 1000;
+  let allRows: { anggota_id: string }[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabaseClient
+      .from("progress")
+      .select("anggota_id")
+      .in("anggota_id", anggotaIds)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allRows;
+}
+
+async function fetchAllProgressDetails(
+  supabaseClient: any,
+  anggotaIds: string[]
+): Promise<any[]> {
+  if (!anggotaIds || anggotaIds.length === 0) return [];
+
+  const PAGE_SIZE = 1000;
+  let allRows: any[] = [];
+  let page = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabaseClient
+      .from("progress")
+      .select(
+        "anggota_id, kating_id, booking_id, kating:kating_id(nama, jenis_kelamin), booking:booking_id(tanggal, slot:slot_id(nama_slot))"
+      )
+      .in("anggota_id", anggotaIds)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allRows;
 }
 

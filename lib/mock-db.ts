@@ -12,6 +12,8 @@ import type {
   MetKatingDetail,
   ProgressRecord,
   SlotWaktu,
+  SystemChangelog,
+  SystemVersion,
   WhatsAppTemplate,
 } from "@/types/database";
 
@@ -80,6 +82,233 @@ let mockBookingList: BookingWithDetails[] = [];
 let mockBookingParticipantsList: BookingParticipant[] = [];
 
 let mockProgressList: ProgressRecord[] = [];
+
+let mockVersions: SystemVersion[] = [
+  {
+    id: "ver-1",
+    version: "v1.4.2",
+    build: "20260808",
+    release_date: "8 Agustus 2026",
+    status: "Stable",
+    current: true,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "ver-2",
+    version: "v1.4.1",
+    build: "20260805",
+    release_date: "5 Agustus 2026",
+    status: "Stable",
+    current: false,
+    created_at: "2026-08-05T08:00:00Z",
+  },
+  {
+    id: "ver-3",
+    version: "v1.4.0",
+    build: "20260801",
+    release_date: "1 Agustus 2026",
+    status: "Stable",
+    current: false,
+    created_at: "2026-08-01T08:00:00Z",
+  },
+  {
+    id: "ver-4",
+    version: "v1.3.2",
+    build: "20260725",
+    release_date: "25 Juli 2026",
+    status: "Stable",
+    current: false,
+    created_at: "2026-07-25T08:00:00Z",
+  },
+  {
+    id: "ver-5",
+    version: "v1.3.0",
+    build: "20260715",
+    release_date: "15 Juli 2026",
+    status: "Stable",
+    current: false,
+    created_at: "2026-07-15T08:00:00Z",
+  },
+];
+
+let mockChangelogs: SystemChangelog[] = [
+  {
+    id: "cl-1",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "FEATURE",
+    title: "Dashboard Enterprise Command Center",
+    description: "Dashboard admin baru dengan situational awareness, status sistem live, dan visual hierarchy modern.",
+    important: true,
+    order_index: 1,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-2",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "FEATURE",
+    title: "Insight Hari Ini & Today Summary",
+    description: "Panel otomatis yang mengekstrak insight krusial dan ringkasan operasional harian.",
+    important: false,
+    order_index: 2,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-3",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "FEATURE",
+    title: "Quick Actions & System Status Panel",
+    description: "Akses cepat ke 6 fungsi utama admin dan indikator kesehatan koneksi database/server realtime.",
+    important: false,
+    order_index: 3,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-4",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "IMPROVEMENT",
+    title: "Leaderboard & Analytics Response Time",
+    description: "Optimasi kueri dan pagination postgrest untuk performa ekstra cepat.",
+    important: false,
+    order_index: 4,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-5",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "BUGFIX",
+    title: "Fixed Leaderboard Pagination (>1000 Progress Rows)",
+    description: "Memperbaiki pemotongan data progress pada tabel > 1000 baris menggunakan chunked range fetching.",
+    important: true,
+    order_index: 5,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-6",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "BUGFIX",
+    title: "Fixed Booking Slot Auto Change",
+    description: "Menghapus fallback || slotList[0] berbahaya dan menjaga immutability slot_id booking.",
+    important: true,
+    order_index: 6,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-7",
+    version_id: "ver-1",
+    version: "v1.4.2",
+    category: "BUGFIX",
+    title: "Fixed Completed_at Synchronization",
+    description: "Menyingkronkan timestamp kelulusan target kating antara anggota dan kelompok secara akurat.",
+    important: false,
+    order_index: 7,
+    created_at: "2026-08-08T08:00:00Z",
+  },
+  {
+    id: "cl-8",
+    version_id: "ver-2",
+    version: "v1.4.1",
+    category: "FEATURE",
+    title: "Fitur Substitusi Anggota Pengganti",
+    description: "Memungkinkan anggota luar kelompok menggantikan anggota yang berhalangan hadir secara fleksibel.",
+    important: true,
+    order_index: 1,
+    created_at: "2026-08-05T08:00:00Z",
+  },
+  {
+    id: "cl-9",
+    version_id: "ver-2",
+    version: "v1.4.1",
+    category: "IMPROVEMENT",
+    title: "Multi-Kating Pendamping per Sesi",
+    description: "Dukungan hingga 2 kating pendamping dalam satu sesi Taaruf.",
+    important: false,
+    order_index: 2,
+    created_at: "2026-08-05T08:00:00Z",
+  },
+  {
+    id: "cl-10",
+    version_id: "ver-3",
+    version: "v1.4.0",
+    category: "FEATURE",
+    title: "Sistem Peringkat Leaderboard Individu & Kelompok",
+    description: "Tampilan visual real-time peringkat kelompok terbaik & individu peserta.",
+    important: true,
+    order_index: 1,
+    created_at: "2026-08-01T08:00:00Z",
+  },
+];
+
+export function getMockVersions(): SystemVersion[] {
+  return mockVersions.map((v) => ({
+    ...v,
+    changelogs: mockChangelogs.filter((c) => c.version === v.version || c.version_id === v.id),
+  }));
+}
+
+export function getMockCurrentVersion(): SystemVersion {
+  const versions = getMockVersions();
+  return versions.find((v) => v.current) || versions[0];
+}
+
+export function saveMockVersion(data: Partial<SystemVersion>) {
+  if (!data.version) throw new Error("Versi harus diisi.");
+  const newVer: SystemVersion = {
+    id: `ver-${Date.now()}`,
+    version: data.version,
+    build: data.build || new Date().toISOString().split("T")[0].replace(/-/g, ""),
+    release_date: data.release_date || "Hari Ini",
+    status: data.status || "Stable",
+    current: data.current || false,
+    created_at: new Date().toISOString(),
+    changelogs: [],
+  };
+
+  if (newVer.current) {
+    mockVersions.forEach((v) => (v.current = false));
+  }
+
+  mockVersions.unshift(newVer);
+  return newVer;
+}
+
+export function setMockCurrentVersion(versionId: string) {
+  mockVersions.forEach((v) => {
+    v.current = v.id === versionId || v.version === versionId;
+  });
+  return getMockCurrentVersion();
+}
+
+export function addMockChangelog(data: Partial<SystemChangelog>) {
+  if (!data.version || !data.title || !data.category) {
+    throw new Error("Parameter changelog tidak lengkap.");
+  }
+  const verObj = mockVersions.find((v) => v.version === data.version || v.id === data.version_id);
+  const newCl: SystemChangelog = {
+    id: `cl-${Date.now()}`,
+    version_id: verObj?.id,
+    version: data.version,
+    category: data.category as any,
+    title: data.title,
+    description: data.description || "",
+    important: data.important || false,
+    order_index: (mockChangelogs.filter((c) => c.version === data.version).length) + 1,
+    created_at: new Date().toISOString(),
+  };
+  mockChangelogs.push(newCl);
+  return newCl;
+}
+
+export function deleteMockChangelog(id: string) {
+  mockChangelogs = mockChangelogs.filter((c) => c.id !== id);
+  return true;
+}
+
 
 // GETTERS & WRITERS
 
