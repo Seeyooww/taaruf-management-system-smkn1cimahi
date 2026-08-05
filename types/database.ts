@@ -194,6 +194,7 @@ export interface MetKatingDetail {
   jenis_kelamin: Gender;
   tanggal: string;
   slot_nama: string;
+  booking_id: string;
 }
 
 export interface SubstitutionRecord {

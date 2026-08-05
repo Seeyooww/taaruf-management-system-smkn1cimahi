@@ -108,6 +108,7 @@ export async function fetchAnggotaProgressSummaries(
         jenis_kelamin: p.kating?.jenis_kelamin ?? "L",
         tanggal: p.booking?.tanggal ?? "",
         slot_nama: p.booking?.slot?.nama_slot ?? "Sesi Taaruf",
+        booking_id: p.booking_id,
       }));
 
       const metCount = metList.length;

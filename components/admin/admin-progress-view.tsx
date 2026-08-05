@@ -3,11 +3,13 @@
 import * as React from "react";
 import {
   Activity,
+  AlertTriangle,
   CheckCircle2,
   FileSpreadsheet,
   Printer,
   Search,
   Shield,
+  Trash2,
   UserCheck,
   Users,
   XCircle,
@@ -21,6 +23,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -34,7 +37,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { AnggotaProgressSummary, Kelompok } from "@/types/database";
+import { deleteKatingHistoryAction, getAnggotaProgressAction } from "@/services/progress.actions";
+import type { AnggotaProgressSummary, Kelompok, MetKatingDetail } from "@/types/database";
 
 interface AdminProgressViewProps {
   initialProgressList: AnggotaProgressSummary[];
@@ -45,7 +49,7 @@ export function AdminProgressView({
   initialProgressList,
   kelompokList,
 }: AdminProgressViewProps) {
-  const [data] = React.useState<AnggotaProgressSummary[]>(initialProgressList);
+  const [data, setData] = React.useState<AnggotaProgressSummary[]>(initialProgressList);
   const [search, setSearch] = React.useState("");
 
   // Filters
@@ -61,6 +65,13 @@ export function AdminProgressView({
     null
   );
   const [isDetailOpen, setIsDetailOpen] = React.useState(false);
+
+  // Delete riwayat state
+  const [deleteTarget, setDeleteTarget] = React.useState<{
+    anggota: AnggotaProgressSummary;
+    met: MetKatingDetail;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   // Extract unique classes for filter
   const uniqueClasses = React.useMemo(() => {
@@ -122,6 +133,37 @@ export function AdminProgressView({
 
   const handlePrintPDF = () => {
     window.print();
+  };
+
+  // ── Hapus Riwayat Handler ─────────────────────────────────────────────────
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { anggota, met } = deleteTarget;
+    setIsDeleting(true);
+
+    try {
+      const res = await deleteKatingHistoryAction(met.kating_id, met.booking_id);
+      if (res.success) {
+        toast.success(
+          `✅ Riwayat kating ${met.kating_nama} untuk ${anggota.nama} berhasil dihapus.`
+        );
+
+        // Refresh data dari server
+        const newData = await getAnggotaProgressAction();
+        setData(newData);
+
+        // Update selectedAnggota agar riwayat dalam dialog langsung diperbarui
+        const updatedAnggota = newData.find((a) => a.anggota_id === anggota.anggota_id) ?? null;
+        setSelectedAnggota(updatedAnggota);
+      } else {
+        toast.error(`❌ ${res.message}`);
+      }
+    } catch {
+      toast.error("❌ Gagal menghapus riwayat. Silakan coba lagi.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
   };
 
   return (
@@ -299,7 +341,7 @@ export function AdminProgressView({
             <TableHeader>
               <TableRow>
                 <TableHead>Nama Anggota</TableHead>
-                <TableHead>Kelompok & Kelas</TableHead>
+                <TableHead>Kelompok &amp; Kelas</TableHead>
                 <TableHead className="w-48">Progress (Kating / Target)</TableHead>
                 <TableHead className="w-24">Persentase</TableHead>
                 <TableHead className="w-28">Status</TableHead>
@@ -432,19 +474,35 @@ export function AdminProgressView({
                   {selectedAnggota?.kating_met_list.map((met, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-xl border bg-card text-xs flex items-center justify-between shadow-2xs"
+                      className="p-3 rounded-xl border bg-card text-xs flex items-center justify-between shadow-2xs gap-2"
                     >
-                      <div className="space-y-0.5">
+                      <div className="space-y-0.5 flex-1 min-w-0">
                         <p className="font-semibold text-foreground flex items-center gap-1.5">
-                          <Shield className="size-3.5 text-primary" /> {met.kating_nama}
+                          <Shield className="size-3.5 text-primary shrink-0" /> {met.kating_nama}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          {met.jenis_kelamin === "L" ? "Akang (L)" : "Teteh (P)"} &bull; {met.slot_nama}
+                          {met.jenis_kelamin === "L" ? "Akang (L)" : "Teteh (P)"} &bull;{" "}
+                          {met.slot_nama}
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px]">
-                        {met.tanggal}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge variant="outline" className="text-[10px]">
+                          {met.tanggal}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                          title="Hapus riwayat ini"
+                          onClick={() => {
+                            if (selectedAnggota) {
+                              setDeleteTarget({ anggota: selectedAnggota, met });
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -490,6 +548,74 @@ export function AdminProgressView({
               Tutup
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-500">
+              <AlertTriangle className="size-5" /> Hapus Riwayat Kating
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              Tindakan ini akan mengurangi progress anggota. Riwayat booking tetap tersimpan.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="rounded-xl border bg-muted/30 p-3 text-xs space-y-1.5 my-1">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Shield className="size-3.5 text-primary" />
+                {deleteTarget.met.kating_nama}
+              </div>
+              <div className="text-muted-foreground space-y-0.5 pl-5">
+                <p>
+                  <span className="text-foreground font-medium">Anggota:</span>{" "}
+                  {deleteTarget.anggota.nama}
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Kelompok:</span>{" "}
+                  {deleteTarget.anggota.kelompok_nama} ({deleteTarget.anggota.kelas})
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Tanggal:</span>{" "}
+                  {deleteTarget.met.tanggal}
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Slot:</span>{" "}
+                  {deleteTarget.met.slot_nama}
+                </p>
+              </div>
+              <p className="text-rose-500 text-[11px] font-medium pt-1 border-t border-border">
+                ⚠ Progress anggota akan berkurang 1 kating.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isDeleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeleting}
+              onClick={handleConfirmDelete}
+            >
+              {isDeleting ? "Menghapus..." : "Ya, Hapus Riwayat"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

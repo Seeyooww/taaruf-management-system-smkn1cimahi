@@ -582,6 +582,7 @@ export function getMockAnggotaProgressSummaries(
         jenis_kelamin: kating ? kating.jenis_kelamin : "L",
         tanggal: booking ? booking.tanggal : p.created_at.split("T")[0],
         slot_nama: slot ? slot.nama_slot : "Sesi Taaruf",
+        booking_id: p.booking_id,
       };
     });
 
