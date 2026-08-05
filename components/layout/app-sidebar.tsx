@@ -27,7 +27,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { APP_NAME, APP_SHORT_NAME, DASHBOARD_NAVIGATION } from "@/lib/constants";
+import { APP_NAME, APP_SHORT_NAME, APP_VERSION, DASHBOARD_NAVIGATION } from "@/lib/constants";
 import { cn, getRoleLabel } from "@/lib/utils";
 import type { UserRole } from "@/types/auth";
 
@@ -144,7 +144,7 @@ export function AppSidebar({ role, className, onNavClick }: AppSidebarProps) {
       <div className="p-4 border-t border-border bg-muted/20">
         <div className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
           <p className="font-medium text-foreground">SMKN 1 Cimahi</p>
-          <p className="text-[11px] mt-0.5">Taaruf Management System v1.0.0</p>
+          <p className="text-[11px] mt-0.5">Taaruf Management System v{APP_VERSION}</p>
         </div>
       </div>
     </aside>

@@ -1,7 +1,9 @@
 import type { UserRole } from "@/types/auth";
+import packageJson from "@/package.json";
 
 export const APP_NAME = "Taaruf Management System";
 export const APP_SHORT_NAME = "TMS";
+export const APP_VERSION = packageJson.version;
 export const APP_DESCRIPTION =
   "Platform internal SMKN 1 Cimahi untuk mengelola fondasi operasional acara Taaruf secara aman, rapi, dan modern.";
 

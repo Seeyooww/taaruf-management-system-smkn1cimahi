@@ -1,5 +1,6 @@
 import "server-only";
 
+import { APP_VERSION } from "@/lib/constants";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
   getMockAnggotaList,
@@ -45,7 +46,7 @@ export async function exportDatabaseToJSON() {
       return {
         metadata: {
           app: "Taaruf Management System (TMS)",
-          version: "1.0.0",
+          version: APP_VERSION,
           exported_at: new Date().toISOString(),
           source: "supabase",
         },
@@ -69,7 +70,7 @@ export async function exportDatabaseToJSON() {
   return {
     metadata: {
       app: "Taaruf Management System (TMS)",
-      version: "1.0.0",
+      version: APP_VERSION,
       exported_at: new Date().toISOString(),
       source: "mock",
     },

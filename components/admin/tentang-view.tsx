@@ -5,6 +5,8 @@ import { Code2, Github, Info, Instagram, ShieldCheck, Sparkles } from "lucide-re
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+import { APP_VERSION } from "@/lib/constants";
+
 export function TentangView() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-4">
@@ -17,7 +19,7 @@ export function TentangView() {
           Taaruf Management System (TMS)
         </h1>
         <p className="text-sm font-semibold text-primary">
-          SMKN 1 Cimahi — Versi 1.0.0 (Production Ready)
+          SMKN 1 Cimahi — Versi {APP_VERSION} (Production Ready)
         </p>
         <div className="flex justify-center gap-2 pt-2">
           <Badge variant="outline" className="border-primary/40 text-primary">

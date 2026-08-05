@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +11,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertTriangle,
   Calendar,
   Clock,
   Download,
@@ -23,10 +27,12 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Trash2,
   UserCheck,
 } from "lucide-react";
 import type { LaporanAnggotaItem, MetKatingDetail } from "@/services/reporting.service";
 import { getLaporanAnggotaAction } from "@/services/reporting.actions";
+import { deleteKatingHistoryAction } from "@/services/progress.actions";
 import { exportToCSV, exportToExcel, exportToPDF, triggerPrint } from "@/utils/export-utils";
 
 interface LaporanAnggotaViewProps {
@@ -35,6 +41,7 @@ interface LaporanAnggotaViewProps {
 }
 
 export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggotaViewProps) {
+  const router = useRouter();
   const [data, setData] = React.useState<LaporanAnggotaItem[]>(initialData);
   const [loading, setLoading] = React.useState(false);
 
@@ -46,6 +53,13 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
 
   // Selected Anggota for Detail Modal
   const [selectedAnggota, setSelectedAnggota] = React.useState<LaporanAnggotaItem | null>(null);
+
+  // Delete Riwayat State
+  const [deleteTarget, setDeleteTarget] = React.useState<{
+    anggota: LaporanAnggotaItem;
+    met: MetKatingDetail;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const kelasOptions = React.useMemo(() => {
     const set = new Set<string>();
@@ -81,6 +95,44 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
       setData(res);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Hapus Riwayat Handler ─────────────────────────────────────────────────
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { anggota, met } = deleteTarget;
+    setIsDeleting(true);
+
+    try {
+      const res = await deleteKatingHistoryAction(met.kating_id, met.booking_id);
+      if (res.success) {
+        toast.success(
+          `✅ Riwayat kating ${met.kating_nama} untuk ${anggota.nama} berhasil dihapus. Progress anggota diperbarui.`
+        );
+
+        // Refresh data dari server untuk sinkronisasi seluruh laporan & komponen
+        router.refresh();
+
+        const newData = await getLaporanAnggotaAction({
+          kelompokId: kelompokId === "all" ? undefined : kelompokId,
+          namaSearch: namaSearch.trim() || undefined,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          kelas: kelasFilter === "all" ? undefined : kelasFilter,
+        });
+        setData(newData);
+
+        // Update selectedAnggota agar modal merefleksikan progress terbaru
+        const updatedAnggota = newData.find((a) => a.anggota_id === anggota.anggota_id) ?? null;
+        setSelectedAnggota(updatedAnggota);
+      } else {
+        toast.error(`❌ ${res.message}`);
+      }
+    } catch {
+      toast.error("❌ Gagal menghapus riwayat. Silakan coba lagi.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -354,7 +406,7 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
                       key={idx}
                       className="p-3 rounded-lg border bg-card flex items-start justify-between gap-3 text-xs"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1 flex-1 min-w-0">
                         <div className="font-semibold text-foreground flex items-center gap-1.5">
                           <Shield className="size-3.5 text-primary shrink-0" />
                           <span>{met.kating_nama}</span>
@@ -371,9 +423,24 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
                           </span>
                         </div>
                       </div>
-                      <Badge variant="secondary" className="text-[10px] shrink-0">
-                        {met.kelompok_nama}
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {met.kelompok_nama || selectedAnggota.kelompok_nama}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                          title="Hapus riwayat ini"
+                          onClick={() => {
+                            if (selectedAnggota) {
+                              setDeleteTarget({ anggota: selectedAnggota, met });
+                            }
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -382,6 +449,74 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-500">
+              <AlertTriangle className="size-5" /> Hapus Riwayat Kating
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              Tindakan ini akan mengurangi progress anggota. Riwayat booking tetap tersimpan.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="rounded-xl border bg-muted/30 p-3 text-xs space-y-1.5 my-1">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <Shield className="size-3.5 text-primary" />
+                {deleteTarget.met.kating_nama}
+              </div>
+              <div className="text-muted-foreground space-y-0.5 pl-5">
+                <p>
+                  <span className="text-foreground font-medium">Anggota:</span>{" "}
+                  {deleteTarget.anggota.nama}
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Kelompok:</span>{" "}
+                  {deleteTarget.anggota.kelompok_nama} ({deleteTarget.anggota.kelas})
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Tanggal:</span>{" "}
+                  {deleteTarget.met.tanggal}
+                </p>
+                <p>
+                  <span className="text-foreground font-medium">Slot:</span>{" "}
+                  {deleteTarget.met.slot_nama}
+                </p>
+              </div>
+              <p className="text-rose-500 text-[11px] font-medium pt-1 border-t border-border">
+                ⚠ Progress anggota akan berkurang 1 kating.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isDeleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeleting}
+              onClick={handleConfirmDelete}
+            >
+              {isDeleting ? "Menghapus..." : "Ya, Hapus Riwayat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
