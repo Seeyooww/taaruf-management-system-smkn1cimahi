@@ -9,11 +9,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertTriangle,
   Calendar,
+  CheckCircle2,
   Clock,
   Download,
   FileSpreadsheet,
@@ -24,10 +27,13 @@ import {
   RefreshCw,
   Search,
   Shield,
+  Trash2,
   Users,
 } from "lucide-react";
-import type { LaporanKatingItem } from "@/services/reporting.service";
+import { toast } from "sonner";
+import type { LaporanKatingItem, KatingHistoryItem } from "@/services/reporting.service";
 import { getLaporanKatingAction } from "@/services/reporting.actions";
+import { deleteKatingHistoryAction } from "@/services/progress.actions";
 import { exportToCSV, exportToExcel, exportToPDF, triggerPrint } from "@/utils/export-utils";
 
 interface LaporanKatingViewProps {
@@ -49,6 +55,13 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
   // Detail Modal
   const [selectedKating, setSelectedKating] = React.useState<LaporanKatingItem | null>(null);
 
+  // Hapus Riwayat state
+  const [deleteRiwayatTarget, setDeleteRiwayatTarget] = React.useState<{
+    kating: LaporanKatingItem;
+    riwayat: KatingHistoryItem;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
   const handleApplyFilter = async () => {
     setLoading(true);
     try {
@@ -60,6 +73,11 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
         tanggalSelesai: tanggalSelesai || undefined,
       });
       setData(res);
+      // Sinkronkan selectedKating jika masih terbuka
+      if (selectedKating) {
+        const updated = res.find((k) => k.kating_id === selectedKating.kating_id);
+        setSelectedKating(updated ?? null);
+      }
     } finally {
       setLoading(false);
     }
@@ -75,8 +93,41 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
     try {
       const res = await getLaporanKatingAction();
       setData(res);
+      if (selectedKating) {
+        const updated = res.find((k) => k.kating_id === selectedKating.kating_id);
+        setSelectedKating(updated ?? null);
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Hapus Riwayat Handler ─────────────────────────────────────────────────
+  const handleConfirmDeleteRiwayat = async () => {
+    if (!deleteRiwayatTarget) return;
+    const { kating, riwayat } = deleteRiwayatTarget;
+    setIsDeleting(true);
+
+    try {
+      const res = await deleteKatingHistoryAction(kating.kating_id, riwayat.booking_id);
+      if (res.success) {
+        toast.success(`✅ Riwayat ${riwayat.kelompok_nama} berhasil dihapus. Progress anggota diperbarui.`);
+
+        // Refresh data dari server
+        const newData = await getLaporanKatingAction();
+        setData(newData);
+
+        // Update selectedKating agar modal merefleksikan data terbaru
+        const updatedKating = newData.find((k) => k.kating_id === kating.kating_id);
+        setSelectedKating(updatedKating ?? null);
+      } else {
+        toast.error(`❌ ${res.message}`);
+      }
+    } catch {
+      toast.error("❌ Gagal menghapus riwayat. Silakan coba lagi.");
+    } finally {
+      setIsDeleting(false);
+      setDeleteRiwayatTarget(null);
     }
   };
 
@@ -314,16 +365,17 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
         </CardContent>
       </Card>
 
-      {/* Kating Detail Modal */}
+      {/* Kating Detail Modal — with delete riwayat */}
       {selectedKating && (
         <Dialog open={Boolean(selectedKating)} onOpenChange={() => setSelectedKating(null)}>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <Shield className="size-5 text-indigo-500" /> Riwayat Taaruf - {selectedKating.nama}
+                <Shield className="size-5 text-indigo-500" /> Riwayat Taaruf — {selectedKating.nama}
               </DialogTitle>
               <DialogDescription className="text-xs">
-                {selectedKating.kelas} • Total {selectedKating.jumlah_ditaarufi} siswa ditaarufi dari {selectedKating.kelompok_pernah_bertemu.length} kelompok.
+                {selectedKating.kelas} • Total {selectedKating.jumlah_ditaarufi} siswa ditaarufi dari{" "}
+                {selectedKating.kelompok_pernah_bertemu.length} kelompok.
               </DialogDescription>
             </DialogHeader>
 
@@ -337,16 +389,16 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
                   Belum ada riwayat sesi booking untuk kating ini.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {selectedKating.riwayat.map((rw, idx) => (
                     <div
                       key={idx}
                       className="p-3 rounded-lg border bg-card flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1 min-w-0 flex-1">
                         <div className="font-semibold text-foreground flex items-center gap-2">
                           <Users className="size-3.5 text-primary shrink-0" />
-                          <span>{rw.kelompok_nama}</span>
+                          <span className="truncate">{rw.kelompok_nama}</span>
                         </div>
                         <div className="text-[11px] text-muted-foreground flex items-center gap-2">
                           <span className="flex items-center gap-1">
@@ -357,23 +409,138 @@ export function LaporanKatingView({ initialData, kelompokList }: LaporanKatingVi
                           </span>
                         </div>
                       </div>
-                      <Badge
-                        variant={
-                          rw.status === "Selesai"
-                            ? "default"
-                            : rw.status === "Disetujui"
-                            ? "secondary"
-                            : "outline"
-                        }
-                        className="text-[10px]"
-                      >
-                        {rw.status}
-                      </Badge>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge
+                          variant={
+                            rw.status === "Selesai"
+                              ? "default"
+                              : rw.status === "Disetujui"
+                              ? "secondary"
+                              : "outline"
+                          }
+                          className="text-[10px]"
+                        >
+                          {rw.status}
+                        </Badge>
+
+                        {/* Tombol Hapus Riwayat */}
+                        <button
+                          type="button"
+                          title="Hapus riwayat ini"
+                          onClick={() =>
+                            setDeleteRiwayatTarget({ kating: selectedKating, riwayat: rw })
+                          }
+                          className="h-6 w-6 flex items-center justify-center rounded border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-colors"
+                        >
+                          <Trash2 className="size-3" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Konfirmasi Hapus Riwayat Dialog */}
+      {deleteRiwayatTarget && (
+        <Dialog
+          open={Boolean(deleteRiwayatTarget)}
+          onOpenChange={(open) => {
+            if (!open && !isDeleting) setDeleteRiwayatTarget(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="size-5 shrink-0" />
+                Hapus Riwayat Taaruf?
+              </DialogTitle>
+              <DialogDescription asChild>
+                <div className="space-y-3 pt-1">
+                  {/* Info riwayat yang akan dihapus */}
+                  <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Kelompok</span>
+                      <span className="font-semibold text-foreground">
+                        {deleteRiwayatTarget.riwayat.kelompok_nama}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Kating</span>
+                      <span className="font-semibold text-foreground">
+                        {deleteRiwayatTarget.kating.nama}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Tanggal</span>
+                      <span className="font-semibold text-foreground">
+                        {deleteRiwayatTarget.riwayat.tanggal}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Slot</span>
+                      <span className="font-semibold text-foreground">
+                        {deleteRiwayatTarget.riwayat.slot_nama}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dampak */}
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-1.5">
+                    <p className="font-semibold text-amber-700 dark:text-amber-300 text-[11px] uppercase tracking-wider">
+                      Tindakan ini akan:
+                    </p>
+                    {[
+                      "Menghapus seluruh progress anggota dari sesi ini",
+                      "Mengurangi jumlah siswa ditaarufi kating",
+                      "Menghapus relasi kelompok–kating",
+                      "Memperbarui seluruh laporan & leaderboard",
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <CheckCircle2 className="size-3 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                        <span className="text-foreground">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground">
+                    Aksi ini tidak dapat dibatalkan. Data yang terhapus tidak bisa dikembalikan.
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteRiwayatTarget(null)}
+                disabled={isDeleting}
+                className="text-xs"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleConfirmDeleteRiwayat}
+                disabled={isDeleting}
+                className="text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white gap-1"
+              >
+                {isDeleting ? (
+                  "Menghapus..."
+                ) : (
+                  <>
+                    <Trash2 className="size-3.5" /> Ya, Hapus Riwayat
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       )}

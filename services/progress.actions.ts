@@ -2,7 +2,9 @@
 
 import {
   checkProgressEstimate,
+  deleteKatingProgressByBooking,
   fetchAnggotaProgressSummaries,
+  rollbackBookingProgress,
   saveBookingProgress,
 } from "@/services/progress.service";
 import type { ParticipantEstimateItem, SubstituteEntry } from "@/types/database";
@@ -45,3 +47,24 @@ export async function checkProgressEstimateAction(
 
   return await checkProgressEstimate(participants, katingIds);
 }
+
+/**
+ * Rollback seluruh progress yang dibuat oleh satu booking.
+ * Dipanggil saat status berubah dari Selesai → Ditolak/Dibatalkan.
+ */
+export async function rollbackBookingProgressAction(bookingId: string) {
+  if (!bookingId) return { success: false, message: "Booking ID tidak valid." };
+  return await rollbackBookingProgress(bookingId);
+}
+
+/**
+ * Hapus progress untuk satu kating dalam satu booking tertentu.
+ * Digunakan pada fitur "Hapus Riwayat" di Laporan Kating.
+ */
+export async function deleteKatingHistoryAction(katingId: string, bookingId: string) {
+  if (!katingId || !bookingId) {
+    return { success: false, message: "Parameter tidak valid." };
+  }
+  return await deleteKatingProgressByBooking(katingId, bookingId);
+}
+

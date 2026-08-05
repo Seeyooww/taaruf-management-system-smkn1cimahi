@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, CalendarCheck, CalendarDays, Check, ListFilter, Search, Trash2, X } from "lucide-react";
+import { Ban, CalendarCheck, CalendarDays, Check, ListFilter, Pencil, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ import { BookingCalendarView } from "@/components/admin/booking-calendar-view";
 import { ProgressConfirmationDialog } from "@/components/admin/progress-confirmation-dialog";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { WhatsAppApprovedActions } from "@/components/ui/whatsapp-approved-actions";
+import { EditBookingDialog } from "@/components/kelompok/edit-booking-dialog";
 import { deleteBookingAction, updateBookingStatusAction } from "@/services/booking.actions";
 import type { Anggota, BookingStatus, BookingWithDetails, EventSettings, Kelompok, SlotWaktu } from "@/types/database";
 
@@ -76,6 +77,9 @@ export function AdminBookingView({
   // Cancel state
   const [cancelTarget, setCancelTarget] = React.useState<BookingWithDetails | null>(null);
   const [isCanceling, setIsCanceling] = React.useState(false);
+
+  // Edit state (for Menunggu Konfirmasi + Disetujui)
+  const [editTarget, setEditTarget] = React.useState<BookingWithDetails | null>(null);
 
   // Derive unique kating list for dropdown filter
   const allKatingList = React.useMemo(() => {
@@ -446,6 +450,16 @@ export function AdminBookingView({
                                   >
                                     <X className="mr-1 size-3" /> Tolak
                                   </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isPending}
+                                    onClick={() => setEditTarget(item)}
+                                    className="h-8 min-h-[32px] px-2 text-xs border-primary/30 text-primary hover:bg-primary/10 gap-1"
+                                    title="Edit booking ini"
+                                  >
+                                    <Pencil className="size-3" /> Edit
+                                  </Button>
                                 </div>
                               )}
 
@@ -459,6 +473,16 @@ export function AdminBookingView({
                                     title="Konfirmasi Presensi & Simpan Progress"
                                   >
                                     <Check className="size-3" /> Berhasil
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isPending}
+                                    onClick={() => setEditTarget(item)}
+                                    className="h-8 min-h-[32px] px-2 text-xs border-primary/30 text-primary hover:bg-primary/10 gap-1 font-semibold"
+                                    title="Edit booking ini"
+                                  >
+                                    <Pencil className="size-3" /> Edit
                                   </Button>
                                   <Button
                                     size="sm"
@@ -566,6 +590,25 @@ export function AdminBookingView({
             setIsProgressOpen(false);
             setTargetBookingForProgress(null);
             // Refresh server data so progress page and stats counters are up-to-date
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Edit Booking Dialog — for Menunggu Konfirmasi & Disetujui */}
+      {!readOnly && (
+        <EditBookingDialog
+          open={!!editTarget}
+          onOpenChange={(open) => { if (!open) setEditTarget(null); }}
+          booking={editTarget}
+          settings={settings}
+          slotList={slotList}
+          anggotaList={editTarget ? allAnggotaList.filter((a) => a.kelompok_id === editTarget.kelompok_id) : []}
+          onBookingUpdated={(updated) => {
+            setData((prev) =>
+              prev.map((b) => (b.id === updated.id ? updated : b))
+            );
+            setEditTarget(null);
             router.refresh();
           }}
         />

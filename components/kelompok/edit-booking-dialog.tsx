@@ -423,7 +423,7 @@ export function EditBookingDialog({
             <Edit className="size-4 sm:size-5" /> Ubah Booking Sesi Taaruf
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Ubah detail pengajuan booking (Status: <strong>Menunggu Konfirmasi</strong>). Single Source of Truth dari <code>booking_participants</code>.
+            Ubah detail pengajuan booking (Status: <strong>{booking?.status ?? "—"}</strong>). Single Source of Truth dari <code>booking_participants</code>.
           </DialogDescription>
         </DialogHeader>
 

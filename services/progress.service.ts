@@ -397,6 +397,272 @@ export async function saveBookingProgress(
 }
 
 /**
+ * Rolls back ALL progress created by a specific booking.
+ *
+ * Idempotent: safe to call even if no progress exists for the booking.
+ * Steps:
+ *  1. Find all progress rows with booking_id = bookingId.
+ *  2. Record affected anggota_ids.
+ *  3. Delete those progress rows.
+ *  4. Delete booking_participants rows for this booking.
+ *  5. Re-evaluate completed_at for each affected anggota.
+ *  6. Re-evaluate completed_at for the kelompok.
+ */
+export async function rollbackBookingProgress(
+  bookingId: string
+): Promise<{ success: boolean; message: string }> {
+  if (!bookingId) return { success: false, message: "bookingId tidak valid." };
+
+  if (!isSupabaseConfigured()) {
+    return { success: true, message: "Rollback tidak diperlukan (mode dev)." };
+  }
+
+  const adminClient = createSupabaseAdminClient();
+
+  // 1. Ambil semua progress yang terkait booking ini
+  const { data: progressRows, error: fetchErr } = await adminClient
+    .from("progress")
+    .select("id, anggota_id")
+    .eq("booking_id", bookingId);
+
+  if (fetchErr) {
+    console.error("[rollbackBookingProgress] fetch progress error:", fetchErr.message);
+    return { success: false, message: `Gagal mengambil data progress: ${fetchErr.message}` };
+  }
+
+  // Jika tidak ada progress → idempotent return success
+  const affectedAnggotaIds = [...new Set((progressRows ?? []).map((r: any) => r.anggota_id as string))];
+
+  // 2. Hapus progress rows
+  if ((progressRows ?? []).length > 0) {
+    const { error: delProgressErr } = await adminClient
+      .from("progress")
+      .delete()
+      .eq("booking_id", bookingId);
+
+    if (delProgressErr) {
+      console.error("[rollbackBookingProgress] delete progress error:", delProgressErr.message);
+      return { success: false, message: `Gagal menghapus progress: ${delProgressErr.message}` };
+    }
+  }
+
+  // 3. Hapus booking_participants rows
+  await adminClient.from("booking_participants").delete().eq("booking_id", bookingId);
+
+  // 4. Re-evaluate completed_at untuk setiap anggota terdampak
+  if (affectedAnggotaIds.length > 0) {
+    const settings = await fetchEventSettings();
+    const targetKating = settings.target_kating || 5;
+
+    for (const anggotaId of affectedAnggotaIds) {
+      const { count } = await adminClient
+        .from("progress")
+        .select("id", { count: "exact", head: true })
+        .eq("anggota_id", anggotaId);
+
+      const newCount = count ?? 0;
+
+      if (newCount < targetKating) {
+        // Nullify completed_at karena progress turun di bawah target
+        await adminClient
+          .from("anggota")
+          .update({ completed_at: null })
+          .eq("id", anggotaId)
+          .not("completed_at", "is", null);
+      }
+    }
+
+    // 5. Re-evaluate kelompok completed_at
+    // Ambil kelompok_id dari booking
+    const { data: bookingRow } = await adminClient
+      .from("booking")
+      .select("kelompok_id")
+      .eq("id", bookingId)
+      .single();
+
+    const kelompokId = (bookingRow as any)?.kelompok_id;
+    if (kelompokId) {
+      const { data: groupAnggota } = await adminClient
+        .from("anggota")
+        .select("id")
+        .eq("kelompok_id", kelompokId)
+        .eq("aktif", true);
+
+      if (groupAnggota && groupAnggota.length > 0) {
+        const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
+        const { data: groupProgressRows } = await adminClient
+          .from("progress")
+          .select("anggota_id")
+          .in("anggota_id", groupAnggotaIds);
+
+        const countMap = new Map<string, number>();
+        (groupProgressRows ?? []).forEach((r: any) => {
+          countMap.set(r.anggota_id, (countMap.get(r.anggota_id) || 0) + 1);
+        });
+
+        const allMembersDone = groupAnggota.every(
+          (a: any) => (countMap.get(a.id) || 0) >= targetKating
+        );
+
+        if (!allMembersDone) {
+          // Nullify kelompok completed_at
+          await adminClient
+            .from("kelompok")
+            .update({ completed_at: null })
+            .eq("id", kelompokId)
+            .not("completed_at", "is", null);
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    message: `Rollback berhasil: seluruh progress booking ${bookingId} telah dihapus.`,
+  };
+}
+
+/**
+ * Hapus progress & relasi kating untuk kombinasi (kating_id, booking_id) tertentu.
+ * Digunakan oleh fitur "Hapus Riwayat" di Laporan Kating.
+ *
+ * Idempotent: tidak error jika tidak ada progress / relasi untuk kombinasi tersebut.
+ */
+export async function deleteKatingProgressByBooking(
+  katingId: string,
+  bookingId: string
+): Promise<{ success: boolean; message: string }> {
+  if (!katingId || !bookingId) {
+    return { success: false, message: "katingId dan bookingId harus diisi." };
+  }
+
+  if (!isSupabaseConfigured()) {
+    return { success: true, message: "Rollback tidak diperlukan (mode dev)." };
+  }
+
+  const adminClient = createSupabaseAdminClient();
+
+  // 1. Ambil kelompok_id dari booking
+  const { data: bookingRow } = await adminClient
+    .from("booking")
+    .select("kelompok_id")
+    .eq("id", bookingId)
+    .single();
+
+  const kelompokId = (bookingRow as any)?.kelompok_id;
+
+  // 2. Ambil semua progress yang terdampak sebelum dihapus
+  const { data: progressRows } = await adminClient
+    .from("progress")
+    .select("anggota_id")
+    .eq("kating_id", katingId)
+    .eq("booking_id", bookingId);
+
+  const affectedSet = new Set<string>();
+  (progressRows ?? []).forEach((r: any) => affectedSet.add(r.anggota_id));
+
+  if (kelompokId) {
+    const { data: grpAnggota } = await adminClient
+      .from("anggota")
+      .select("id")
+      .eq("kelompok_id", kelompokId);
+    (grpAnggota ?? []).forEach((a: any) => affectedSet.add(a.id));
+  }
+
+  const affectedAnggotaIds = Array.from(affectedSet);
+
+  // 3. Hapus relasi booking_kating
+  await adminClient
+    .from("booking_kating")
+    .delete()
+    .eq("booking_id", bookingId)
+    .eq("kating_id", katingId);
+
+  // 4. Hapus progress rows
+  await adminClient
+    .from("progress")
+    .delete()
+    .eq("kating_id", katingId)
+    .eq("booking_id", bookingId);
+
+  // 5. Cek apakah masih ada kating lain terdaftar di booking ini
+  const { data: remainingBk } = await adminClient
+    .from("booking_kating")
+    .select("id")
+    .eq("booking_id", bookingId);
+
+  if (!remainingBk || remainingBk.length === 0) {
+    // Jika tidak ada kating tersisa di booking ini, hapus booking_participants & set status Dibatalkan
+    await adminClient.from("booking_participants").delete().eq("booking_id", bookingId);
+    await adminClient.from("booking").update({ status: "Dibatalkan" }).eq("id", bookingId);
+  }
+
+  // 6. Re-evaluate completed_at untuk setiap anggota terdampak
+  if (affectedAnggotaIds.length > 0) {
+    const settings = await fetchEventSettings();
+    const targetKating = settings.target_kating || 5;
+
+    for (const anggotaId of affectedAnggotaIds) {
+      const { count } = await adminClient
+        .from("progress")
+        .select("id", { count: "exact", head: true })
+        .eq("anggota_id", anggotaId);
+
+      const newCount = count ?? 0;
+      if (newCount < targetKating) {
+        await adminClient
+          .from("anggota")
+          .update({ completed_at: null })
+          .eq("id", anggotaId)
+          .not("completed_at", "is", null);
+      }
+    }
+  }
+
+  // 7. Re-evaluate kelompok completed_at
+  if (kelompokId) {
+    const settings = await fetchEventSettings();
+    const targetKating = settings.target_kating || 5;
+
+    const { data: groupAnggota } = await adminClient
+      .from("anggota")
+      .select("id")
+      .eq("kelompok_id", kelompokId)
+      .eq("aktif", true);
+
+    if (groupAnggota && groupAnggota.length > 0) {
+      const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
+      const { data: groupProgressRows } = await adminClient
+        .from("progress")
+        .select("anggota_id")
+        .in("anggota_id", groupAnggotaIds);
+
+      const countMap = new Map<string, number>();
+      (groupProgressRows ?? []).forEach((r: any) => {
+        countMap.set(r.anggota_id, (countMap.get(r.anggota_id) || 0) + 1);
+      });
+
+      const allMembersDone = groupAnggota.every(
+        (a: any) => (countMap.get(a.id) || 0) >= targetKating
+      );
+
+      if (!allMembersDone) {
+        await adminClient
+          .from("kelompok")
+          .update({ completed_at: null })
+          .eq("id", kelompokId)
+          .not("completed_at", "is", null);
+      }
+    }
+  }
+
+  return {
+    success: true,
+    message: `Riwayat taaruf berhasil dihapus: relasi kating dan progress anggota telah diperbarui.`,
+  };
+}
+
+/**
   * Checks for each final participant whether their progress will increase (+1)
   * or remain unchanged (already met all selected kating) based on history in database.
   */

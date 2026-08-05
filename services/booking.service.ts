@@ -13,7 +13,31 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/sup
 import { fetchEventSettings } from "@/services/settings.service";
 import { fetchSlotList } from "@/services/slot.service";
 import { recordActivityLog } from "@/services/activity.service";
+import { rollbackBookingProgress } from "@/services/progress.service";
 import type { BookingStatus, CalendarBookingEntry, KatingBasic, Kating } from "@/types/database";
+
+/**
+ * Helper: Returns true if two time ranges [a_mulai, a_selesai) and [b_mulai, b_selesai) overlap.
+ * Waktu dalam format "HH:mm" (24-jam).
+ */
+function doTimeSlotsOverlap(
+  a_mulai: string,
+  a_selesai: string,
+  b_mulai: string,
+  b_selesai: string
+): boolean {
+  // Konversi "HH:mm" ke menit sejak tengah malam untuk perbandingan numerik
+  const toMinutes = (t: string): number => {
+    const [h, m] = t.split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const aStart = toMinutes(a_mulai);
+  const aEnd = toMinutes(a_selesai);
+  const bStart = toMinutes(b_mulai);
+  const bEnd = toMinutes(b_selesai);
+  // Overlap: aStart < bEnd AND bStart < aEnd
+  return aStart < bEnd && bStart < aEnd;
+}
 
 // CalendarBookingEntry is defined in @/types/database and re-exported for convenience
 export type { CalendarBookingEntry } from "@/types/database";
@@ -106,13 +130,18 @@ export async function fetchAvailableKating(
 
     if (!katingList) return [];
 
-    // Langkah 1: Cari semua booking_id yang aktif (bukan Ditolak/Dibatalkan)
-    // untuk kombinasi (tanggal, slot_id) yang tepat, terkecuali excludeBookingId jika ada.
+    // Detail slot target (jam_mulai & jam_selesai)
+    const { data: targetSlot } = await supabase
+      .from("slot_waktu")
+      .select("jam_mulai, jam_selesai")
+      .eq("id", slot_id)
+      .single();
+
+    // Langkah 1: Cari semua booking_id yang aktif (bukan Ditolak/Dibatalkan) pada tanggal tersebut
     let activeQuery = supabase
       .from("booking")
-      .select("id")
+      .select("id, slot_id, slot:slot_id(jam_mulai, jam_selesai)")
       .eq("tanggal", tanggal)
-      .eq("slot_id", slot_id)
       .not("status", "in", '("Ditolak","Dibatalkan")');
 
     if (excludeBookingId) {
@@ -125,13 +154,31 @@ export async function fetchAvailableKating(
       return katingList as Kating[];
     }
 
-    const activeBookingIds = activeBookings.map((b: any) => b.id);
+    // Filter booking yang bentrok secara slot_id ATAU secara rentang jam
+    const busyBookingIds = activeBookings
+      .filter((b: any) => {
+        if (b.slot_id === slot_id) return true;
+        if (targetSlot && b.slot?.jam_mulai && b.slot?.jam_selesai) {
+          return doTimeSlotsOverlap(
+            targetSlot.jam_mulai,
+            targetSlot.jam_selesai,
+            b.slot.jam_mulai,
+            b.slot.jam_selesai
+          );
+        }
+        return false;
+      })
+      .map((b: any) => b.id);
+
+    if (busyBookingIds.length === 0) {
+      return katingList as Kating[];
+    }
 
     // Langkah 2: Cari semua kating_id yang terdaftar di booking aktif tersebut.
     const { data: busyRows } = await supabase
       .from("booking_kating")
       .select("kating_id")
-      .in("booking_id", activeBookingIds);
+      .in("booking_id", busyBookingIds);
 
     const busyIds = new Set<string>(
       (busyRows ?? []).map((r: any) => r.kating_id).filter(Boolean)
@@ -188,7 +235,7 @@ export async function createBooking(data: {
     };
   }
 
-  // Validate availability for every selected kating
+  // Validate availability: berbasis slot_id dulu
   const available = await fetchAvailableKating(data.tanggal, data.slot_id);
   const availableIds = new Set(available.map((k) => k.id));
   const conflictIds = data.kating_ids.filter((id) => !availableIds.has(id));
@@ -199,6 +246,45 @@ export async function createBooking(data: {
       message:
         "Satu atau lebih kating yang Anda pilih sudah dibooking oleh kelompok lain untuk slot waktu tersebut. Silakan pilih kating lain.",
     };
+  }
+
+  // ── Validasi konflik berbasis WAKTU (bukan hanya slot_id) ─────────────────
+  // Tangkap kasus slot berbeda tapi waktunya overlap (mis. "Istirahat 3" vs "Jam Pulang" keduanya 15:00)
+  if (isSupabaseConfigured()) {
+    const _sc = await createSupabaseServerClient();
+    // Ambil semua booking aktif pada tanggal yang sama (bukan slot yang sama)
+    const { data: sameDayBookings } = await _sc
+      .from("booking")
+      .select("id, slot_id, slot:slot_id(jam_mulai, jam_selesai)")
+      .eq("tanggal", data.tanggal)
+      .neq("slot_id", data.slot_id)
+      .not("status", "in", '("Ditolak","Dibatalkan")');
+
+    if (sameDayBookings && sameDayBookings.length > 0) {
+      // Filter hanya booking yang waktunya overlap dengan slot yang dipilih
+      const overlappingBookingIds = (sameDayBookings as any[])
+        .filter((b) => {
+          const bSlot = b.slot as { jam_mulai: string; jam_selesai: string } | null;
+          if (!bSlot) return false;
+          return doTimeSlotsOverlap(slot.jam_mulai, slot.jam_selesai, bSlot.jam_mulai, bSlot.jam_selesai);
+        })
+        .map((b) => b.id);
+
+      if (overlappingBookingIds.length > 0) {
+        const { data: timeConflictKating } = await _sc
+          .from("booking_kating")
+          .select("kating_id")
+          .in("booking_id", overlappingBookingIds)
+          .in("kating_id", data.kating_ids);
+
+        if (timeConflictKating && timeConflictKating.length > 0) {
+          return {
+            success: false,
+            message: `Konflik waktu: satu atau lebih kating yang Anda pilih sudah memiliki sesi lain pada rentang waktu ${slot.jam_mulai}–${slot.jam_selesai} di tanggal ${data.tanggal}. Silakan pilih kating lain atau ubah slot.`,
+          };
+        }
+      }
+    }
   }
 
   if (isSupabaseConfigured()) {
@@ -342,6 +428,16 @@ export async function createBooking(data: {
 export async function updateBookingStatus(id: string, status: BookingStatus) {
   if (isSupabaseConfigured()) {
     const supabase = await createSupabaseServerClient();
+
+    // ── Cek status saat ini sebelum update ───────────────────────────────────
+    const { data: currentBooking } = await supabase
+      .from("booking")
+      .select("status")
+      .eq("id", id)
+      .single();
+
+    const previousStatus = (currentBooking as any)?.status as BookingStatus | undefined;
+
     const { error } = await supabase
       .from("booking")
       .update({ status })
@@ -355,13 +451,45 @@ export async function updateBookingStatus(id: string, status: BookingStatus) {
       };
     }
 
+    // ── Auto-rollback: Selesai → Ditolak/Dibatalkan ──────────────────────────
+    const isRollingBack =
+      previousStatus === "Selesai" &&
+      (status === "Ditolak" || status === "Dibatalkan");
+
+    if (isRollingBack) {
+      try {
+        const rollbackResult = await rollbackBookingProgress(id);
+        if (!rollbackResult.success) {
+          console.error("[updateBookingStatus] rollback failed:", rollbackResult.message);
+          // Non-fatal: status sudah berubah, log saja
+        }
+      } catch (e) {
+        console.error("[updateBookingStatus] rollback exception:", e);
+      }
+    }
+
     if (status === "Dibatalkan") {
       try {
         await recordActivityLog(
           "Admin",
           "admin",
           "Booking Dibatalkan",
-          `Booking ID ${id} telah dibatalkan oleh Admin.`
+          `Booking ID ${id} telah dibatalkan oleh Admin.${
+            isRollingBack ? " Progress yang terkait telah di-rollback." : ""
+          }`
+        );
+      } catch (e) {
+        console.error("[updateBookingStatus] Activity log error:", e);
+      }
+    }
+
+    if (status === "Ditolak" && isRollingBack) {
+      try {
+        await recordActivityLog(
+          "Admin",
+          "admin",
+          "Booking Diubah",
+          `Booking ID ${id} diubah dari Selesai menjadi Ditolak. Progress yang terkait telah di-rollback.`
         );
       } catch (e) {
         console.error("[updateBookingStatus] Activity log error:", e);
@@ -462,6 +590,13 @@ export async function deleteBooking(id: string): Promise<{ success: boolean; mes
   if (isSupabaseConfigured()) {
     const supabase = createSupabaseAdminClient();
 
+    // Rollback seluruh progress & presensi terkait booking ini terlebih dahulu
+    try {
+      await rollbackBookingProgress(id);
+    } catch (e) {
+      console.error("[deleteBooking] rollback error:", e);
+    }
+
     // Delete child rows first (if CASCADE is not set in DB)
     const { error: bkError } = await supabase
       .from("booking_kating")
@@ -555,10 +690,11 @@ export async function updateBookingDetails(
       return { success: false, message: "Booking tidak ditemukan." };
     }
 
-    if (currentBooking.status !== "Menunggu Konfirmasi") {
+    const editableStatuses: string[] = ["Menunggu Konfirmasi", "Disetujui"];
+    if (!editableStatuses.includes(currentBooking.status)) {
       return {
         success: false,
-        message: `Hanya booking berstatus "Menunggu Konfirmasi" yang dapat diubah. Status saat ini: "${currentBooking.status}".`,
+        message: `Hanya booking berstatus "Menunggu Konfirmasi" atau "Disetujui" yang dapat diubah. Status saat ini: "${currentBooking.status}".`,
       };
     }
 
@@ -569,8 +705,7 @@ export async function updateBookingDetails(
       .eq("id", data.slot_id)
       .single();
 
-    // 2. LAST-MILE CONFLICT CHECK (Right before UPDATE)
-    // Check if any selected kating is already booked by another active booking on this date & slot
+    // 2. LAST-MILE CONFLICT CHECK (Right before UPDATE) — berbasis slot_id
     const { data: conflictingBookings } = await supabase
       .from("booking")
       .select("id")
@@ -593,6 +728,54 @@ export async function updateBookingDetails(
           success: false,
           message: `🔴 Konflik Booking: ${busyNames} sudah dibooking oleh kelompok lain pada tanggal ${data.tanggal} slot ${newSlot?.nama_slot ?? "tersebut"}. Silakan pilih kating lain.`,
         };
+      }
+    }
+
+    // 2b. VALIDASI KONFLIK BERBASIS WAKTU — tangkap slot berbeda tapi waktu overlap
+    const { data: newSlotDetail } = await supabase
+      .from("slot_waktu")
+      .select("jam_mulai, jam_selesai")
+      .eq("id", data.slot_id)
+      .single();
+
+    if (newSlotDetail) {
+      const { data: sameDayOtherBookings } = await supabase
+        .from("booking")
+        .select("id, slot_id, slot:slot_id(jam_mulai, jam_selesai)")
+        .eq("tanggal", data.tanggal)
+        .neq("slot_id", data.slot_id)
+        .neq("id", bookingId)
+        .not("status", "in", '("Ditolak","Dibatalkan")');
+
+      if (sameDayOtherBookings && sameDayOtherBookings.length > 0) {
+        const timeOverlapIds = (sameDayOtherBookings as any[])
+          .filter((b) => {
+            const bSlot = b.slot as { jam_mulai: string; jam_selesai: string } | null;
+            if (!bSlot) return false;
+            return doTimeSlotsOverlap(
+              (newSlotDetail as any).jam_mulai,
+              (newSlotDetail as any).jam_selesai,
+              bSlot.jam_mulai,
+              bSlot.jam_selesai
+            );
+          })
+          .map((b) => b.id);
+
+        if (timeOverlapIds.length > 0) {
+          const { data: timeConflictKating } = await supabase
+            .from("booking_kating")
+            .select("kating_id, kating:kating_id(nama)")
+            .in("booking_id", timeOverlapIds)
+            .in("kating_id", data.kating_ids);
+
+          if (timeConflictKating && timeConflictKating.length > 0) {
+            const conflictNames = timeConflictKating.map((r: any) => r.kating?.nama ?? "Kating").join(", ");
+            return {
+              success: false,
+              message: `🔴 Konflik Waktu: ${conflictNames} sudah memiliki sesi lain pada rentang waktu yang sama (${(newSlotDetail as any).jam_mulai}–${(newSlotDetail as any).jam_selesai}). Silakan pilih kating lain.`,
+            };
+          }
+        }
       }
     }
 
