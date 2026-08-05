@@ -30,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { CommandPalette } from "@/components/ui/command-palette";
 import type {
-  ActivityLog,
   Anggota,
   AnggotaProgressSummary,
   BookingWithDetails,
@@ -39,6 +38,7 @@ import type {
   Kelompok,
   LiveSessionItem,
 } from "@/types/database";
+import type { ActivityLog } from "@/types/activity";
 import type { AnalyticsData } from "@/services/reporting.service";
 
 interface AdminDashboardViewProps {
