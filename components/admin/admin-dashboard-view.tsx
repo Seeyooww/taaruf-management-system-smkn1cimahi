@@ -42,7 +42,7 @@ import type {
 import type { AnalyticsData } from "@/services/reporting.service";
 
 interface AdminDashboardViewProps {
-  sessionProfile: { displayName?: string; username?: string } | null;
+  sessionProfile: { displayName?: string | null; username?: string | null } | null;
   settings: EventSettings;
   kelompokList: Kelompok[];
   anggotaList: Anggota[];
