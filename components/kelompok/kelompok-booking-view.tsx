@@ -203,7 +203,7 @@ export function KelompokBookingView({
               Ditolak
             </Button>
           </div>
-          {/* Ubah Booking — hanya untuk Menunggu Konfirmasi */}
+          {/* Ubah Booking — untuk Menunggu Konfirmasi & Disetujui */}
           <Button
             size="sm"
             variant="outline"
@@ -221,7 +221,7 @@ export function KelompokBookingView({
       );
     }
 
-    // === Disetujui: WA actions + setelah hari H ===
+    // === Disetujui: WA actions + Ubah Booking + setelah hari H ===
     if (item.status === "Disetujui") {
       return (
         <div className="flex flex-col items-end gap-1.5">
@@ -232,6 +232,19 @@ export function KelompokBookingView({
             className="align-right"
           />
           <div className="flex flex-wrap items-center justify-end gap-1.5 mt-1">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 min-h-[32px] text-xs gap-1 text-primary border-primary/40 hover:bg-primary/10 font-semibold"
+              disabled={isLoading}
+              onClick={() => {
+                setEditBooking(item);
+                setIsEditOpen(true);
+              }}
+            >
+              <Edit className="size-3" />
+              Ubah Booking
+            </Button>
             <span className="text-[10px] text-muted-foreground self-center">Setelah taaruf:</span>
             <Button
               size="sm"
