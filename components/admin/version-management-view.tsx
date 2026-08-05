@@ -2,31 +2,19 @@
 
 import * as React from "react";
 import {
-  AlertTriangle,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
-  Clock,
-  Code,
-  FileText,
-  Flame,
   GitCommit,
-  Info,
   Layers,
   Plus,
-  Rocket,
-  Shield,
-  Sparkles,
   Star,
-  Tag,
   Trash2,
-  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -45,14 +33,14 @@ import {
   deleteChangelogAction,
   setCurrentVersionAction,
 } from "@/services/version.actions";
-import type { ChangelogCategory, SystemChangelog, SystemVersion } from "@/types/database";
+import type { ChangelogCategory, SystemVersion } from "@/types/database";
 
 interface VersionManagementViewProps {
   initialVersions: SystemVersion[];
 }
 
 export function VersionManagementView({ initialVersions }: VersionManagementViewProps) {
-  const [versions, setVersions] = React.useState<SystemVersion[]>(initialVersions);
+  const [versions] = React.useState<SystemVersion[]>(initialVersions);
   const [isPending, startTransition] = React.useTransition();
 
   // Create Version Dialog state
@@ -182,7 +170,7 @@ export function VersionManagementView({ initialVersions }: VersionManagementView
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">
-                Manajemen Versi & Changelog
+                Manajemen Versi &amp; Changelog
               </h1>
               <Badge variant="success" className="text-[10px] font-mono">
                 Dinamis
@@ -414,7 +402,7 @@ export function VersionManagementView({ initialVersions }: VersionManagementView
                 <Label className="text-xs font-semibold">Status Rilis</Label>
                 <select
                   value={statusInput}
-                  onChange={(e) => setStatusInput(e.target.value as any)}
+                  onChange={(e) => setStatusInput(e.target.value as "Stable" | "Beta" | "RC")}
                   className="w-full h-9 rounded-md border bg-background px-3 py-1 text-xs"
                 >
                   <option value="Stable">Stable</option>
@@ -518,7 +506,7 @@ export function VersionManagementView({ initialVersions }: VersionManagementView
                 className="size-4 rounded border-border"
               />
               <Label htmlFor="is-important" className="text-xs cursor-pointer font-medium">
-                Tandai Sebagai "Penting / Highlight"
+                Tandai Sebagai &quot;Penting / Highlight&quot;
               </Label>
             </div>
 

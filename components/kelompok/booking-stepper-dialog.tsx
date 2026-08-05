@@ -273,10 +273,9 @@ export function BookingStepperDialog({
   // Derived peserta state
   const presentOriginalIds = anggotaList.filter((a) => !absentIds.has(a.id)).map((a) => a.id);
   const absentOriginalIds = Array.from(absentIds);
-  const substituteIds = new Set(substitutes.map((s) => s.substituteId));
-
   // Sub candidates: all anggota except those from this kelompok and those already used as subs
   const subCandidates = React.useMemo(() => {
+    const substituteIds = new Set(substitutes.map((s) => s.substituteId));
     const q = subSearch.toLowerCase().trim();
     return allAnggota.filter(
       (a) =>
@@ -286,7 +285,7 @@ export function BookingStepperDialog({
           a.nama.toLowerCase().includes(q) ||
           (a.kelompok_nama ?? "").toLowerCase().includes(q))
     );
-  }, [allAnggota, kelompokId, substituteIds, subSearch]);
+  }, [allAnggota, kelompokId, substitutes, subSearch]);
 
   const handleNext = () => {
     if (step === 1) {

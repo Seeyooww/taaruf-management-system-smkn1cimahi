@@ -5,6 +5,7 @@ import type {
   BookingParticipant,
   BookingStatus,
   BookingWithDetails,
+  ChangelogCategory,
   EventSettings,
   Gender,
   Kating,
@@ -83,7 +84,7 @@ let mockBookingParticipantsList: BookingParticipant[] = [];
 
 let mockProgressList: ProgressRecord[] = [];
 
-let mockVersions: SystemVersion[] = [
+const mockVersions: SystemVersion[] = [
   {
     id: "ver-1",
     version: "v1.4.2",
@@ -293,7 +294,7 @@ export function addMockChangelog(data: Partial<SystemChangelog>) {
     id: `cl-${Date.now()}`,
     version_id: verObj?.id,
     version: data.version,
-    category: data.category as any,
+    category: data.category as ChangelogCategory,
     title: data.title,
     description: data.description || "",
     important: data.important || false,

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, ChevronRight, Sparkles, X } from "lucide-react";
+import { CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,7 @@ export function WhatsNewPopup({
             <span className="text-xs font-mono font-bold text-primary">{currentVersion.version}</span>
           </div>
           <DialogTitle className="text-lg font-extrabold text-foreground flex items-center gap-2">
-            🎉 What's New di TMS!
+            🎉 What&apos;s New di TMS!
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
             Taaruf Management System telah diperbarui ke versi <strong>{currentVersion.version}</strong> ({currentVersion.release_date}).

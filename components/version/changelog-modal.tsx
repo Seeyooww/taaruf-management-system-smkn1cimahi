@@ -3,25 +3,18 @@
 import * as React from "react";
 import {
   AlertTriangle,
-  BadgeAlert,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   FileText,
-  Flame,
   GitCommit,
-  Info,
-  Lock,
   Rocket,
   Shield,
   Sparkles,
   Tag,
   Wrench,
-  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -29,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ChangelogCategory, SystemChangelog, SystemVersion } from "@/types/database";
+import type { ChangelogCategory, SystemVersion } from "@/types/database";
 
 interface ChangelogModalProps {
   open: boolean;

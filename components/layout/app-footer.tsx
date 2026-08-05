@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Radio, ShieldCheck } from "lucide-react";
+import { FileText } from "lucide-react";
 import { useVersion } from "@/components/version/version-provider";
-import { Badge } from "@/components/ui/badge";
 
 interface AppFooterProps {
   className?: string;

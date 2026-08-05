@@ -4,37 +4,24 @@ import * as React from "react";
 import Link from "next/link";
 import {
   Activity,
-  AlertCircle,
-  ArrowDownRight,
-  ArrowUpRight,
-  BarChart3,
   Bell,
   Calendar,
   CalendarCheck,
   CheckCircle2,
-  ChevronRight,
   Clock,
-  Compass,
-  Database,
   Download,
   Flame,
-  Globe,
-  Layers,
   LayoutDashboard,
   PieChart as PieIcon,
   Plus,
   Radio,
   RefreshCw,
   Server,
-  Shield,
-  ShieldCheck,
   Sparkles,
   TrendingUp,
   UserCheck,
   UserPlus,
   Users,
-  Wifi,
-  XCircle,
   Zap,
 } from "lucide-react";
 
@@ -55,7 +42,7 @@ import type {
 import type { AnalyticsData } from "@/services/reporting.service";
 
 interface AdminDashboardViewProps {
-  sessionProfile: any;
+  sessionProfile: { displayName?: string; username?: string } | null;
   settings: EventSettings;
   kelompokList: Kelompok[];
   anggotaList: Anggota[];
@@ -70,7 +57,6 @@ interface AdminDashboardViewProps {
 export function AdminDashboardView({
   sessionProfile,
   settings,
-  kelompokList,
   anggotaList,
   katingList,
   bookingList,
@@ -85,8 +71,6 @@ export function AdminDashboardView({
 
   // ── Calculation & Computed Metrics ──────────────────────────────────────────
   const totalAnggota = anggotaList.length;
-  const totalKelompok = kelompokList.length;
-  const totalKating = katingList.length;
   const katingAktif = katingList.filter((k) => k.aktif).length;
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -99,7 +83,6 @@ export function AdminDashboardView({
 
   const targetKatingSetting = settings?.target_kating || 5;
   const sudahTarget = progressSummaries.filter((p) => p.total_kating_met >= targetKatingSetting).length;
-  const belumTarget = Math.max(0, totalAnggota - sudahTarget);
   const hampirTarget = progressSummaries.filter(
     (p) => p.total_kating_met < targetKatingSetting && p.percentage >= 70
   ).length;
@@ -267,7 +250,7 @@ export function AdminDashboardView({
               Selamat Datang, {sessionProfile?.displayName || sessionProfile?.username || "Admin"}! 👋
             </h2>
             <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Pantau jalannya sesi Ta'aruf, persetujuan booking kelompok, presensi kating, & pencapaian target peserta secara realtime.
+              Pantau jalannya sesi Ta&apos;aruf, persetujuan booking kelompok, presensi kating, &amp; pencapaian target peserta secara realtime.
             </p>
           </div>
 
@@ -354,14 +337,14 @@ export function AdminDashboardView({
         <CardHeader className="pb-3 border-b border-border/50">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <Radio className="size-4 animate-pulse text-emerald-500" /> Sesi Ta'aruf Berlangsung Saat Ini
+              <Radio className="size-4 animate-pulse text-emerald-500" /> Sesi Ta&apos;aruf Berlangsung Saat Ini
             </CardTitle>
             <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
               {liveSessions.length} Active Now
             </Badge>
           </div>
           <CardDescription className="text-xs">
-            Daftar kelompok dan Kating pendamping yang saat ini sedang melakukan sesi Ta'aruf secara fisik.
+            Daftar kelompok dan Kating pendamping yang saat ini sedang melakukan sesi Ta&apos;aruf secara fisik.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
@@ -496,7 +479,7 @@ export function AdminDashboardView({
                     <Calendar className="size-4 text-blue-500" /> Booking Per Hari
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Tren pengajuan sesi Ta'aruf sepanjang pelaksanaan acara
+                    Tren pengajuan sesi Ta&apos;aruf sepanjang pelaksanaan acara
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="text-xs font-mono">
@@ -796,7 +779,7 @@ export function AdminDashboardView({
               <Clock className="size-4 text-purple-500" /> ⚡ Aktivitas Terbaru
             </CardTitle>
             <CardDescription className="text-xs">
-              Log aktivitas realtime dari sistem Ta'aruf Management System.
+              Log aktivitas realtime dari sistem Ta&apos;aruf Management System.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4 space-y-3 text-xs max-h-72 overflow-y-auto pr-1">
@@ -830,10 +813,10 @@ export function AdminDashboardView({
         <Card className="glass-card border-emerald-500/30 shadow-xs space-y-4">
           <CardHeader className="pb-3 border-b border-border/40">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <Server className="size-4 text-emerald-500" /> 🖥️ System & Today Summary
+              <Server className="size-4 text-emerald-500" /> 🖥️ System &amp; Today Summary
             </CardTitle>
             <CardDescription className="text-xs">
-              Status operasional server & ringkasan metrik hari ini.
+              Status operasional server &amp; ringkasan metrik hari ini.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-xs">
