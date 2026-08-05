@@ -5,9 +5,12 @@ import { Code2, Github, Info, Instagram, ShieldCheck, Sparkles } from "lucide-re
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-import { APP_VERSION } from "@/lib/constants";
+import { useVersion } from "@/components/version/version-provider";
 
 export function TentangView() {
+  const { currentVersion, openChangelogModal } = useVersion();
+  const verStr = currentVersion?.version || "v1.4.2";
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto py-4">
       {/* Hero Header */}
@@ -18,8 +21,16 @@ export function TentangView() {
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Taaruf Management System (TMS)
         </h1>
-        <p className="text-sm font-semibold text-primary">
-          SMKN 1 Cimahi — Versi {APP_VERSION} (Production Ready)
+        <p className="text-sm font-semibold text-primary flex items-center justify-center gap-1.5">
+          <span>SMKN 1 Cimahi — Versi</span>
+          <button
+            type="button"
+            onClick={openChangelogModal}
+            className="font-mono font-bold hover:underline cursor-pointer bg-primary/10 px-2 py-0.5 rounded border border-primary/20"
+          >
+            {verStr}
+          </button>
+          <span>(Production Ready)</span>
         </p>
         <div className="flex justify-center gap-2 pt-2">
           <Badge variant="outline" className="border-primary/40 text-primary">
