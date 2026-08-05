@@ -796,3 +796,102 @@ export function simulateDayOneEvent() {
     progressCount: mockProgressList.length,
   };
 }
+
+export function saveMockManualProgress(
+  anggotaId: string,
+  katingId: string,
+  tanggal: string,
+  slotId: string
+) {
+  const existing = mockProgressList.find(
+    (p) => p.anggota_id === anggotaId && p.kating_id === katingId
+  );
+  if (existing) {
+    return { success: false, message: "Anggota sudah pernah ditaarufi oleh kating ini." };
+  }
+
+  const anggota = mockAnggotaList.find((a) => a.id === anggotaId);
+  const kelompokId = anggota?.kelompok_id;
+
+  let booking = mockBookingList.find(
+    (b) => b.kelompok_id === kelompokId && b.tanggal === tanggal && b.slot_id === slotId
+  );
+
+  if (!booking) {
+    const newBkId = `booking-mock-manual-${Date.now()}`;
+    booking = {
+      id: newBkId,
+      kelompok_id: kelompokId ?? "kel-1",
+      tanggal,
+      slot_id: slotId,
+      status: "Selesai",
+      catatan: "Manual entry",
+      created_at: new Date().toISOString(),
+    } as unknown as BookingWithDetails;
+    mockBookingList.push(booking!);
+  }
+
+  mockProgressList.push({
+    id: `prog-mock-${Date.now()}`,
+    anggota_id: anggotaId,
+    kating_id: katingId,
+    booking_id: booking!.id,
+    created_at: new Date().toISOString(),
+  });
+
+  return { success: true, message: "Riwayat progress berhasil ditambahkan." };
+}
+
+export function updateMockManualProgress(
+  anggotaId: string,
+  oldKatingId: string,
+  oldBookingId: string,
+  newKatingId: string,
+  newTanggal: string,
+  newSlotId: string
+) {
+  if (oldKatingId !== newKatingId) {
+    const dup = mockProgressList.find(
+      (p) => p.anggota_id === anggotaId && p.kating_id === newKatingId
+    );
+    if (dup) {
+      return { success: false, message: "Anggota sudah memiliki riwayat progress dengan kating pilihan baru." };
+    }
+  }
+
+  const anggota = mockAnggotaList.find((a) => a.id === anggotaId);
+  const kelompokId = anggota?.kelompok_id;
+
+  let newBooking = mockBookingList.find(
+    (b) => b.kelompok_id === kelompokId && b.tanggal === newTanggal && b.slot_id === newSlotId
+  );
+
+  if (!newBooking) {
+    const newBkId = `booking-mock-manual-${Date.now()}`;
+    newBooking = {
+      id: newBkId,
+      kelompok_id: kelompokId ?? "kel-1",
+      tanggal: newTanggal,
+      slot_id: newSlotId,
+      status: "Selesai",
+      catatan: "Manual edit",
+      created_at: new Date().toISOString(),
+    } as unknown as BookingWithDetails;
+    mockBookingList.push(newBooking!);
+  }
+
+  const idx = mockProgressList.findIndex(
+    (p) => p.anggota_id === anggotaId && p.kating_id === oldKatingId && p.booking_id === oldBookingId
+  );
+
+  if (idx !== -1) {
+    mockProgressList[idx] = {
+      ...mockProgressList[idx],
+      kating_id: newKatingId,
+      booking_id: newBooking.id,
+    };
+  }
+
+  return { success: true, message: "Riwayat progress berhasil diperbarui." };
+}
+

@@ -1,11 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
   CheckCircle2,
   FileSpreadsheet,
+  Pencil,
+  Plus,
   Printer,
   Search,
   Shield,
@@ -37,8 +40,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { deleteKatingHistoryAction, getAnggotaProgressAction } from "@/services/progress.actions";
-import type { AnggotaProgressSummary, Kelompok, MetKatingDetail } from "@/types/database";
+import {
+  createManualProgressAction,
+  deleteKatingHistoryAction,
+  getAnggotaProgressAction,
+  getKatingAndSlotOptionsAction,
+  updateManualProgressAction,
+} from "@/services/progress.actions";
+import type {
+  AnggotaProgressSummary,
+  Kating,
+  Kelompok,
+  MetKatingDetail,
+  SlotWaktu,
+} from "@/types/database";
 
 interface AdminProgressViewProps {
   initialProgressList: AnggotaProgressSummary[];
@@ -49,6 +64,7 @@ export function AdminProgressView({
   initialProgressList,
   kelompokList,
 }: AdminProgressViewProps) {
+  const router = useRouter();
   const [data, setData] = React.useState<AnggotaProgressSummary[]>(initialProgressList);
   const [search, setSearch] = React.useState("");
 
@@ -72,6 +88,121 @@ export function AdminProgressView({
     met: MetKatingDetail;
   } | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Create / Edit Form state
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editTargetMet, setEditTargetMet] = React.useState<MetKatingDetail | null>(null);
+
+  const [katingOptions, setKatingOptions] = React.useState<Kating[]>([]);
+  const [slotOptions, setSlotOptions] = React.useState<SlotWaktu[]>([]);
+
+  const [formKatingId, setFormKatingId] = React.useState("");
+  const [formTanggal, setFormTanggal] = React.useState("");
+  const [formSlotId, setFormSlotId] = React.useState("");
+  const [katingFilterSearch, setKatingFilterSearch] = React.useState("");
+  const [isSubmittingForm, setIsSubmittingForm] = React.useState(false);
+
+  // Fetch kating & slot options when form opens
+  const loadOptions = React.useCallback(async () => {
+    if (katingOptions.length > 0 && slotOptions.length > 0) return;
+    try {
+      const { katingOptions: kOpts, slotOptions: sOpts } = await getKatingAndSlotOptionsAction();
+      setKatingOptions(kOpts);
+      setSlotOptions(sOpts);
+    } catch {
+      toast.error("Gagal memuat opsi kating & slot.");
+    }
+  }, [katingOptions.length, slotOptions.length]);
+
+  const handleOpenCreateForm = () => {
+    setEditTargetMet(null);
+    setFormKatingId("");
+    setFormTanggal(new Date().toISOString().split("T")[0]);
+    setFormSlotId(slotOptions[0]?.id ?? "");
+    setKatingFilterSearch("");
+    setIsFormOpen(true);
+    loadOptions();
+  };
+
+  const handleOpenEditForm = (met: MetKatingDetail) => {
+    setEditTargetMet(met);
+    setFormKatingId(met.kating_id);
+    setFormTanggal(met.tanggal || new Date().toISOString().split("T")[0]);
+
+    // Find slot_id matching slot_nama if possible
+    const matchedSlot = slotOptions.find((s) => s.nama_slot === met.slot_nama);
+    setFormSlotId(matchedSlot ? matchedSlot.id : slotOptions[0]?.id ?? "");
+    setKatingFilterSearch("");
+    setIsFormOpen(true);
+    loadOptions();
+  };
+
+  // Filtered kating options for autocomplete dropdown
+  const filteredKatingOptions = React.useMemo(() => {
+    if (!katingFilterSearch.trim()) return katingOptions;
+    const q = katingFilterSearch.toLowerCase();
+    return katingOptions.filter(
+      (k) => k.nama.toLowerCase().includes(q) || k.kelas.toLowerCase().includes(q)
+    );
+  }, [katingOptions, katingFilterSearch]);
+
+  // Handle Form Submit (Create or Edit)
+  const handleSubmitForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAnggota) return;
+
+    const slotToUse = formSlotId || slotOptions[0]?.id;
+    if (!formKatingId || !formTanggal || !slotToUse) {
+      toast.error("Seluruh kolom (Kating, Tanggal, Slot) wajib dipilih.");
+      return;
+    }
+
+    setIsSubmittingForm(true);
+
+    try {
+      let res;
+      if (editTargetMet) {
+        res = await updateManualProgressAction(
+          selectedAnggota.anggota_id,
+          editTargetMet.kating_id,
+          editTargetMet.booking_id,
+          formKatingId,
+          formTanggal,
+          slotToUse
+        );
+      } else {
+        res = await createManualProgressAction(
+          selectedAnggota.anggota_id,
+          formKatingId,
+          formTanggal,
+          slotToUse
+        );
+      }
+
+      if (res.success) {
+        toast.success(`✅ ${res.message}`);
+        setIsFormOpen(false);
+
+        // Refresh data dari server
+        router.refresh();
+        const newData = await getAnggotaProgressAction(
+          kelompokFilter === "all" ? undefined : kelompokFilter
+        );
+        setData(newData);
+
+        // Update selectedAnggota agar dialog langsung merefleksikan perubahan
+        const updatedAnggota =
+          newData.find((a) => a.anggota_id === selectedAnggota.anggota_id) ?? null;
+        setSelectedAnggota(updatedAnggota);
+      } else {
+        toast.error(`❌ ${res.message}`);
+      }
+    } catch {
+      toast.error("❌ Gagal menyimpan data progress.");
+    } finally {
+      setIsSubmittingForm(false);
+    }
+  };
 
   // Extract unique classes for filter
   const uniqueClasses = React.useMemo(() => {
@@ -149,7 +280,10 @@ export function AdminProgressView({
         );
 
         // Refresh data dari server
-        const newData = await getAnggotaProgressAction();
+        router.refresh();
+        const newData = await getAnggotaProgressAction(
+          kelompokFilter === "all" ? undefined : kelompokFilter
+        );
         setData(newData);
 
         // Update selectedAnggota agar riwayat dalam dialog langsung diperbarui
@@ -439,9 +573,18 @@ export function AdminProgressView({
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Activity className="size-5 text-primary" /> Rincian Pertemuan Kating
-            </DialogTitle>
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2">
+                <Activity className="size-5 text-primary" /> Rincian Pertemuan Kating
+              </DialogTitle>
+              <Button
+                size="sm"
+                onClick={handleOpenCreateForm}
+                className="h-7 text-xs bg-primary gap-1"
+              >
+                <Plus className="size-3.5" /> Tambah Riwayat
+              </Button>
+            </div>
             <DialogDescription className="text-xs">
               Riwayat Kating yang ditemui oleh {selectedAnggota?.nama}.
             </DialogDescription>
@@ -461,9 +604,11 @@ export function AdminProgressView({
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold text-foreground">
-                Daftar Kating Unik Yang Ditemui:
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground">
+                  Daftar Kating Unik Yang Ditemui:
+                </label>
+              </div>
 
               {selectedAnggota?.kating_met_list.length === 0 ? (
                 <div className="rounded-xl border border-dashed p-6 text-center text-xs text-muted-foreground">
@@ -485,10 +630,19 @@ export function AdminProgressView({
                           {met.slot_nama}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Badge variant="outline" className="text-[10px]">
                           {met.tanggal}
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          title="Edit riwayat ini"
+                          onClick={() => handleOpenEditForm(met)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -509,45 +663,149 @@ export function AdminProgressView({
               )}
             </div>
 
-          {/* Riwayat Substitusi — hanya tampil jika ada */}
-          {(selectedAnggota?.substitution_history?.length ?? 0) > 0 && (
-            <div className="space-y-2 border-t pt-3">
-              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <UserCheck className="size-3.5 text-indigo-400" /> Riwayat Substitusi
-              </label>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                {selectedAnggota?.substitution_history?.map((s, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded-xl border bg-muted/20 text-xs flex items-center justify-between"
-                  >
-                    <div className="space-y-0.5">
-                      {s.replaces_nama ? (
-                        <p className="font-medium text-indigo-400">
-                          Hadir sebagai Pengganti{" "}
-                          <span className="font-bold">{s.replaces_nama}</span>
-                        </p>
-                      ) : (
-                        <p className="font-medium text-rose-400">
-                          Digantikan oleh{" "}
-                          <span className="font-bold">{s.replaced_by_nama}</span>
-                        </p>
-                      )}
-                      <p className="text-[11px] text-muted-foreground">{s.slot_nama}</p>
+            {/* Riwayat Substitusi — hanya tampil jika ada */}
+            {(selectedAnggota?.substitution_history?.length ?? 0) > 0 && (
+              <div className="space-y-2 border-t pt-3">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <UserCheck className="size-3.5 text-indigo-400" /> Riwayat Substitusi
+                </label>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                  {selectedAnggota?.substitution_history?.map((s, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-xl border bg-muted/20 text-xs flex items-center justify-between"
+                    >
+                      <div className="space-y-0.5">
+                        {s.replaces_nama ? (
+                          <p className="font-medium text-indigo-400">
+                            Hadir sebagai Pengganti{" "}
+                            <span className="font-bold">{s.replaces_nama}</span>
+                          </p>
+                        ) : (
+                          <p className="font-medium text-rose-400">
+                            Digantikan oleh{" "}
+                            <span className="font-bold">{s.replaced_by_nama}</span>
+                          </p>
+                        )}
+                        <p className="text-[11px] text-muted-foreground">{s.slot_nama}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] shrink-0">
+                        {s.tanggal}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-[10px] shrink-0">{s.tanggal}</Badge>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
           <div className="flex justify-end pt-2">
             <Button variant="outline" size="sm" onClick={() => setIsDetailOpen(false)}>
               Tutup
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Form Create / Edit Progress Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {editTargetMet ? (
+                <>
+                  <Pencil className="size-5 text-primary" /> Edit Riwayat Progress
+                </>
+              ) : (
+                <>
+                  <Plus className="size-5 text-primary" /> Tambah Riwayat Progress
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {selectedAnggota?.nama} ({selectedAnggota?.kelompok_nama})
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitForm} className="space-y-4 py-2 text-xs">
+            {/* Select / Filter Kating */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Pilih Kating <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                placeholder="Cari nama kating / kelas..."
+                value={katingFilterSearch}
+                onChange={(e) => setKatingFilterSearch(e.target.value)}
+                className="h-8 text-xs mb-1"
+              />
+              <select
+                value={formKatingId}
+                onChange={(e) => setFormKatingId(e.target.value)}
+                required
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs focus:ring-1 focus:ring-primary"
+              >
+                <option value="">-- Pilih Kating --</option>
+                {filteredKatingOptions.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.nama} ({k.jenis_kelamin === "L" ? "Akang" : "Teteh"}) - {k.kelas}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tanggal Input */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Tanggal Sesi <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="date"
+                value={formTanggal}
+                onChange={(e) => setFormTanggal(e.target.value)}
+                required
+                className="h-9 text-xs"
+              />
+            </div>
+
+            {/* Slot Dropdown */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Slot Waktu <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formSlotId}
+                onChange={(e) => setFormSlotId(e.target.value)}
+                required
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs focus:ring-1 focus:ring-primary"
+              >
+                {slotOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nama_slot} ({s.jam_mulai} - {s.jam_selesai})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmittingForm}
+                onClick={() => setIsFormOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="submit" size="sm" disabled={isSubmittingForm} className="bg-primary">
+                {isSubmittingForm
+                  ? "Menyimpan..."
+                  : editTargetMet
+                  ? "Simpan Perubahan"
+                  : "Simpan Riwayat"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

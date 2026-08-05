@@ -2,11 +2,15 @@
 
 import {
   checkProgressEstimate,
+  createManualProgress,
   deleteKatingProgressByBooking,
   fetchAnggotaProgressSummaries,
   rollbackBookingProgress,
   saveBookingProgress,
+  updateManualProgress,
 } from "@/services/progress.service";
+import { fetchKatingList } from "@/services/kating.service";
+import { fetchSlotList } from "@/services/slot.service";
 import type { ParticipantEstimateItem, SubstituteEntry } from "@/types/database";
 
 export async function getAnggotaProgressAction(kelompokId?: string) {
@@ -59,7 +63,7 @@ export async function rollbackBookingProgressAction(bookingId: string) {
 
 /**
  * Hapus progress untuk satu kating dalam satu booking tertentu.
- * Digunakan pada fitur "Hapus Riwayat" di Laporan Kating.
+ * Digunakan pada fitur "Hapus Riwayat" di Laporan Kating & Progress.
  */
 export async function deleteKatingHistoryAction(katingId: string, bookingId: string) {
   if (!katingId || !bookingId) {
@@ -68,3 +72,50 @@ export async function deleteKatingHistoryAction(katingId: string, bookingId: str
   return await deleteKatingProgressByBooking(katingId, bookingId);
 }
 
+/**
+ * Tambah riwayat progress anggota secara manual oleh Admin.
+ */
+export async function createManualProgressAction(
+  anggotaId: string,
+  katingId: string,
+  tanggal: string,
+  slotId: string
+) {
+  return await createManualProgress(anggotaId, katingId, tanggal, slotId);
+}
+
+/**
+ * Edit riwayat progress anggota secara manual oleh Admin.
+ */
+export async function updateManualProgressAction(
+  anggotaId: string,
+  oldKatingId: string,
+  oldBookingId: string,
+  newKatingId: string,
+  newTanggal: string,
+  newSlotId: string
+) {
+  return await updateManualProgress(
+    anggotaId,
+    oldKatingId,
+    oldBookingId,
+    newKatingId,
+    newTanggal,
+    newSlotId
+  );
+}
+
+/**
+ * Fetch daftar kating aktif & slot waktu untuk opsi form manual progress.
+ */
+export async function getKatingAndSlotOptionsAction() {
+  const [katingList, slotList] = await Promise.all([
+    fetchKatingList(),
+    fetchSlotList(),
+  ]);
+
+  return {
+    katingOptions: katingList.filter((k) => k.aktif),
+    slotOptions: slotList.filter((s) => s.aktif),
+  };
+}

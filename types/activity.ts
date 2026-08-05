@@ -5,6 +5,8 @@ export type ActivityType =
   | "Booking Dibatalkan"
   | "Booking Diubah"
   | "Progress Dihitung"
+  | "Tambah Progress Manual"
+  | "Edit Progress Manual"
   | "Pengaturan Diubah"
   | "Import Data";
 

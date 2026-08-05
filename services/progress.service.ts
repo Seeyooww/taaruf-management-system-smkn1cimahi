@@ -4,6 +4,8 @@ import { isSupabaseConfigured } from "@/lib/env";
 import {
   getMockAnggotaProgressSummaries,
   saveMockBookingProgress,
+  saveMockManualProgress,
+  updateMockManualProgress,
 } from "@/lib/mock-db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -723,3 +725,347 @@ export async function checkProgressEstimate(
     totalUnchanged: alreadyMetList.length,
   };
 }
+
+/**
+ * Tambah riwayat progress anggota secara manual.
+ * Memastikan tidak ada duplikasi kating_id untuk anggota_id yang sama.
+ */
+export async function createManualProgress(
+  anggotaId: string,
+  katingId: string,
+  tanggal: string,
+  slotId: string
+): Promise<{ success: boolean; message: string }> {
+  if (!anggotaId || !katingId || !tanggal || !slotId) {
+    return { success: false, message: "Seluruh kolom (Kating, Tanggal, Slot) wajib diisi." };
+  }
+
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+
+    // 1. Cek duplikasi progress untuk anggota & kating yang sama
+    const { data: existingProgress } = await adminClient
+      .from("progress")
+      .select("id")
+      .eq("anggota_id", anggotaId)
+      .eq("kating_id", katingId)
+      .limit(1);
+
+    if (existingProgress && existingProgress.length > 0) {
+      return {
+        success: false,
+        message: "Anggota ini sudah pernah memiliki riwayat progress dengan kating tersebut.",
+      };
+    }
+
+    // 2. Ambil data anggota untuk mendapatkan kelompok_id
+    const { data: anggotaRow } = await adminClient
+      .from("anggota")
+      .select("id, nama, kelompok_id")
+      .eq("id", anggotaId)
+      .single();
+
+    if (!anggotaRow) {
+      return { success: false, message: "Data anggota tidak ditemukan." };
+    }
+
+    const kelompokId = (anggotaRow as any).kelompok_id;
+
+    // 3. Cari atau buat booking untuk kelompok, tanggal, dan slot yang bersangkutan
+    let bookingId: string | null = null;
+    const { data: existingBooking } = await adminClient
+      .from("booking")
+      .select("id")
+      .eq("kelompok_id", kelompokId)
+      .eq("tanggal", tanggal)
+      .eq("slot_id", slotId)
+      .limit(1);
+
+    if (existingBooking && existingBooking.length > 0) {
+      bookingId = existingBooking[0].id;
+    } else {
+      const { data: newBooking, error: createBookingErr } = await adminClient
+        .from("booking")
+        .insert({
+          kelompok_id: kelompokId,
+          tanggal: tanggal,
+          slot_id: slotId,
+          status: "Selesai",
+          catatan: "Manual progress entry by Admin",
+        })
+        .select("id")
+        .single();
+
+      if (createBookingErr || !newBooking) {
+        return {
+          success: false,
+          message: `Gagal membuat sesi booking manual: ${createBookingErr?.message}`,
+        };
+      }
+      bookingId = newBooking.id;
+    }
+
+    // 4. Pastikan relasi booking_kating ada
+    const { data: existingBk } = await adminClient
+      .from("booking_kating")
+      .select("id")
+      .eq("booking_id", bookingId)
+      .eq("kating_id", katingId)
+      .limit(1);
+
+    if (!existingBk || existingBk.length === 0) {
+      await adminClient.from("booking_kating").insert({
+        booking_id: bookingId,
+        kating_id: katingId,
+      });
+    }
+
+    // 5. Simpan progress row
+    const { error: insertProgressErr } = await adminClient
+      .from("progress")
+      .insert({
+        anggota_id: anggotaId,
+        kating_id: katingId,
+        booking_id: bookingId,
+      });
+
+    if (insertProgressErr) {
+      return {
+        success: false,
+        message: `Gagal menyimpan riwayat progress: ${insertProgressErr.message}`,
+      };
+    }
+
+    // 6. Re-evaluate completed_at untuk anggota & kelompok
+    await reevaluateCompletedAt(anggotaId, kelompokId);
+
+    await recordActivityLog(
+      "Admin",
+      "admin",
+      "Tambah Progress Manual",
+      `Menambahkan riwayat progress kating manual untuk anggota ${anggotaRow.nama}.`
+    );
+
+    return {
+      success: true,
+      message: `Riwayat progress kating berhasil ditambahkan.`,
+    };
+  }
+
+  return saveMockManualProgress(anggotaId, katingId, tanggal, slotId);
+}
+
+/**
+ * Edit riwayat progress anggota secara manual.
+ */
+export async function updateManualProgress(
+  anggotaId: string,
+  oldKatingId: string,
+  oldBookingId: string,
+  newKatingId: string,
+  newTanggal: string,
+  newSlotId: string
+): Promise<{ success: boolean; message: string }> {
+  if (!anggotaId || !oldKatingId || !oldBookingId || !newKatingId || !newTanggal || !newSlotId) {
+    return { success: false, message: "Parameter update riwayat tidak lengkap." };
+  }
+
+  if (isSupabaseConfigured()) {
+    const adminClient = createSupabaseAdminClient();
+
+    // 1. Jika kating berubah, pastikan tidak duplikat dengan riwayat lain milik anggota tersebut
+    if (oldKatingId !== newKatingId) {
+      const { data: existingProgress } = await adminClient
+        .from("progress")
+        .select("id")
+        .eq("anggota_id", anggotaId)
+        .eq("kating_id", newKatingId)
+        .limit(1);
+
+      if (existingProgress && existingProgress.length > 0) {
+        return {
+          success: false,
+          message: "Anggota ini sudah memiliki riwayat progress dengan kating pilihan baru.",
+        };
+      }
+    }
+
+    // 2. Ambil data anggota untuk kelompok_id
+    const { data: anggotaRow } = await adminClient
+      .from("anggota")
+      .select("id, nama, kelompok_id")
+      .eq("id", anggotaId)
+      .single();
+
+    if (!anggotaRow) {
+      return { success: false, message: "Data anggota tidak ditemukan." };
+    }
+
+    const kelompokId = (anggotaRow as any).kelompok_id;
+
+    // 3. Cari atau buat booking baru jika tanggal/slot berubah
+    let newBookingId = oldBookingId;
+
+    const { data: existingBooking } = await adminClient
+      .from("booking")
+      .select("id")
+      .eq("kelompok_id", kelompokId)
+      .eq("tanggal", newTanggal)
+      .eq("slot_id", newSlotId)
+      .limit(1);
+
+    if (existingBooking && existingBooking.length > 0) {
+      newBookingId = existingBooking[0].id;
+    } else {
+      const { data: createdBooking, error: createBkErr } = await adminClient
+        .from("booking")
+        .insert({
+          kelompok_id: kelompokId,
+          tanggal: newTanggal,
+          slot_id: newSlotId,
+          status: "Selesai",
+          catatan: "Manual progress edit by Admin",
+        })
+        .select("id")
+        .single();
+
+      if (createBkErr || !createdBooking) {
+        return { success: false, message: `Gagal memperbarui sesi booking: ${createBkErr?.message}` };
+      }
+      newBookingId = createdBooking.id;
+    }
+
+    // 4. Pastikan relasi booking_kating baru ada
+    const { data: newBkRel } = await adminClient
+      .from("booking_kating")
+      .select("id")
+      .eq("booking_id", newBookingId)
+      .eq("kating_id", newKatingId)
+      .limit(1);
+
+    if (!newBkRel || newBkRel.length === 0) {
+      await adminClient.from("booking_kating").insert({
+        booking_id: newBookingId,
+        kating_id: newKatingId,
+      });
+    }
+
+    // 5. Update progress row
+    const { error: updateProgressErr } = await adminClient
+      .from("progress")
+      .update({
+        kating_id: newKatingId,
+        booking_id: newBookingId,
+      })
+      .eq("anggota_id", anggotaId)
+      .eq("kating_id", oldKatingId)
+      .eq("booking_id", oldBookingId);
+
+    if (updateProgressErr) {
+      return { success: false, message: `Gagal memperbarui progress: ${updateProgressErr.message}` };
+    }
+
+    // 6. Bersihkan old booking_kating jika tidak ada lagi progress yang menggunakan oldBookingId & oldKatingId
+    if (oldBookingId !== newBookingId || oldKatingId !== newKatingId) {
+      const { data: remainingOldProgress } = await adminClient
+        .from("progress")
+        .select("id")
+        .eq("booking_id", oldBookingId)
+        .eq("kating_id", oldKatingId);
+
+      if (!remainingOldProgress || remainingOldProgress.length === 0) {
+        await adminClient
+          .from("booking_kating")
+          .delete()
+          .eq("booking_id", oldBookingId)
+          .eq("kating_id", oldKatingId);
+      }
+    }
+
+    // 7. Re-evaluate completed_at untuk anggota & kelompok
+    await reevaluateCompletedAt(anggotaId, kelompokId);
+
+    await recordActivityLog(
+      "Admin",
+      "admin",
+      "Edit Progress Manual",
+      `Memperbarui riwayat progress kating manual untuk anggota ${anggotaRow.nama}.`
+    );
+
+    return { success: true, message: "Riwayat progress berhasil diperbarui." };
+  }
+
+  return updateMockManualProgress(anggotaId, oldKatingId, oldBookingId, newKatingId, newTanggal, newSlotId);
+}
+
+/**
+ * Re-evaluasi status completed_at anggota & kelompok secara atomic.
+ */
+async function reevaluateCompletedAt(anggotaId: string, kelompokId: string) {
+  const adminClient = createSupabaseAdminClient();
+  const settings = await fetchEventSettings();
+  const targetKating = settings.target_kating || 5;
+  const nowIso = new Date().toISOString();
+
+  // Evaluasi Anggota
+  const { count } = await adminClient
+    .from("progress")
+    .select("id", { count: "exact", head: true })
+    .eq("anggota_id", anggotaId);
+
+  const newCount = count ?? 0;
+  if (newCount >= targetKating) {
+    await adminClient
+      .from("anggota")
+      .update({ completed_at: nowIso })
+      .eq("id", anggotaId)
+      .is("completed_at", null);
+  } else {
+    await adminClient
+      .from("anggota")
+      .update({ completed_at: null })
+      .eq("id", anggotaId)
+      .not("completed_at", "is", null);
+  }
+
+  // Evaluasi Kelompok
+  if (kelompokId) {
+    const { data: groupAnggota } = await adminClient
+      .from("anggota")
+      .select("id")
+      .eq("kelompok_id", kelompokId)
+      .eq("aktif", true);
+
+    if (groupAnggota && groupAnggota.length > 0) {
+      const groupAnggotaIds = groupAnggota.map((a: any) => a.id);
+      const { data: groupProgressRows } = await adminClient
+        .from("progress")
+        .select("anggota_id")
+        .in("anggota_id", groupAnggotaIds);
+
+      const countMap = new Map<string, number>();
+      (groupProgressRows ?? []).forEach((r: any) => {
+        countMap.set(r.anggota_id, (countMap.get(r.anggota_id) || 0) + 1);
+      });
+
+      const allMembersDone = groupAnggota.every(
+        (a: any) => (countMap.get(a.id) || 0) >= targetKating
+      );
+
+      if (allMembersDone) {
+        await adminClient
+          .from("kelompok")
+          .update({ completed_at: nowIso })
+          .eq("id", kelompokId)
+          .is("completed_at", null);
+      } else {
+        await adminClient
+          .from("kelompok")
+          .update({ completed_at: null })
+          .eq("id", kelompokId)
+          .not("completed_at", "is", null);
+      }
+    }
+  }
+}
+

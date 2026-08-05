@@ -23,6 +23,8 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Pencil,
+  Plus,
   Printer,
   RefreshCw,
   Search,
@@ -32,7 +34,13 @@ import {
 } from "lucide-react";
 import type { LaporanAnggotaItem, MetKatingDetail } from "@/services/reporting.service";
 import { getLaporanAnggotaAction } from "@/services/reporting.actions";
-import { deleteKatingHistoryAction } from "@/services/progress.actions";
+import {
+  createManualProgressAction,
+  deleteKatingHistoryAction,
+  getKatingAndSlotOptionsAction,
+  updateManualProgressAction,
+} from "@/services/progress.actions";
+import type { Kating, SlotWaktu } from "@/types/database";
 import { exportToCSV, exportToExcel, exportToPDF, triggerPrint } from "@/utils/export-utils";
 
 interface LaporanAnggotaViewProps {
@@ -60,6 +68,119 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
     met: MetKatingDetail;
   } | null>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Create / Edit Form state
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editTargetMet, setEditTargetMet] = React.useState<MetKatingDetail | null>(null);
+
+  const [katingOptions, setKatingOptions] = React.useState<Kating[]>([]);
+  const [slotOptions, setSlotOptions] = React.useState<SlotWaktu[]>([]);
+  const [formKatingId, setFormKatingId] = React.useState("");
+  const [formTanggal, setFormTanggal] = React.useState("");
+  const [formSlotId, setFormSlotId] = React.useState("");
+  const [katingFilterSearch, setKatingFilterSearch] = React.useState("");
+  const [isSubmittingForm, setIsSubmittingForm] = React.useState(false);
+
+  const loadOptions = React.useCallback(async () => {
+    if (katingOptions.length > 0 && slotOptions.length > 0) return;
+    try {
+      const { katingOptions: kOpts, slotOptions: sOpts } = await getKatingAndSlotOptionsAction();
+      setKatingOptions(kOpts);
+      setSlotOptions(sOpts);
+    } catch {
+      toast.error("Gagal memuat opsi kating & slot.");
+    }
+  }, [katingOptions.length, slotOptions.length]);
+
+  const handleOpenCreateForm = () => {
+    setEditTargetMet(null);
+    setFormKatingId("");
+    setFormTanggal(new Date().toISOString().split("T")[0]);
+    setFormSlotId(slotOptions[0]?.id ?? "");
+    setKatingFilterSearch("");
+    setIsFormOpen(true);
+    loadOptions();
+  };
+
+  const handleOpenEditForm = (met: MetKatingDetail) => {
+    setEditTargetMet(met);
+    setFormKatingId(met.kating_id);
+    setFormTanggal(met.tanggal || new Date().toISOString().split("T")[0]);
+
+    const matchedSlot = slotOptions.find((s) => s.nama_slot === met.slot_nama);
+    setFormSlotId(matchedSlot ? matchedSlot.id : slotOptions[0]?.id ?? "");
+    setKatingFilterSearch("");
+    setIsFormOpen(true);
+    loadOptions();
+  };
+
+  const filteredKatingOptions = React.useMemo(() => {
+    if (!katingFilterSearch.trim()) return katingOptions;
+    const q = katingFilterSearch.toLowerCase();
+    return katingOptions.filter(
+      (k) => k.nama.toLowerCase().includes(q) || k.kelas.toLowerCase().includes(q)
+    );
+  }, [katingOptions, katingFilterSearch]);
+
+  const handleSubmitForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAnggota) return;
+
+    const slotToUse = formSlotId || slotOptions[0]?.id;
+    if (!formKatingId || !formTanggal || !slotToUse) {
+      toast.error("Seluruh kolom (Kating, Tanggal, Slot) wajib dipilih.");
+      return;
+    }
+
+    setIsSubmittingForm(true);
+
+    try {
+      let res;
+      if (editTargetMet) {
+        res = await updateManualProgressAction(
+          selectedAnggota.anggota_id,
+          editTargetMet.kating_id,
+          editTargetMet.booking_id,
+          formKatingId,
+          formTanggal,
+          slotToUse
+        );
+      } else {
+        res = await createManualProgressAction(
+          selectedAnggota.anggota_id,
+          formKatingId,
+          formTanggal,
+          slotToUse
+        );
+      }
+
+      if (res.success) {
+        toast.success(`✅ ${res.message}`);
+        setIsFormOpen(false);
+
+        // Refresh data dari server
+        router.refresh();
+        const newData = await getLaporanAnggotaAction({
+          kelompokId: kelompokId === "all" ? undefined : kelompokId,
+          namaSearch: namaSearch.trim() || undefined,
+          status: statusFilter === "all" ? undefined : statusFilter,
+          kelas: kelasFilter === "all" ? undefined : kelasFilter,
+        });
+        setData(newData);
+
+        // Update selectedAnggota agar dialog langsung merefleksikan perubahan
+        const updatedAnggota =
+          newData.find((a) => a.anggota_id === selectedAnggota.anggota_id) ?? null;
+        setSelectedAnggota(updatedAnggota);
+      } else {
+        toast.error(`❌ ${res.message}`);
+      }
+    } catch {
+      toast.error("❌ Gagal menyimpan data progress.");
+    } finally {
+      setIsSubmittingForm(false);
+    }
+  };
 
   const kelasOptions = React.useMemo(() => {
     const set = new Set<string>();
@@ -382,9 +503,18 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
         <Dialog open={Boolean(selectedAnggota)} onOpenChange={() => setSelectedAnggota(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <UserCheck className="size-5 text-primary" /> Detail Kating Met - {selectedAnggota.nama}
-              </DialogTitle>
+              <div className="flex items-center justify-between gap-2">
+                <DialogTitle className="text-base font-bold flex items-center gap-2">
+                  <UserCheck className="size-5 text-primary" /> Detail Kating Met - {selectedAnggota.nama}
+                </DialogTitle>
+                <Button
+                  size="sm"
+                  onClick={handleOpenCreateForm}
+                  className="h-7 text-xs bg-primary gap-1"
+                >
+                  <Plus className="size-3.5" /> Tambah Riwayat
+                </Button>
+              </div>
               <DialogDescription className="text-xs">
                 {selectedAnggota.kelompok_nama} ({selectedAnggota.kelas}) • Progress: {selectedAnggota.progress} / {selectedAnggota.target_kating} Kating ({selectedAnggota.persentase}%)
               </DialogDescription>
@@ -423,10 +553,19 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 shrink-0">
                         <Badge variant="secondary" className="text-[10px]">
                           {met.kelompok_nama || selectedAnggota.kelompok_nama}
                         </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                          title="Edit riwayat ini"
+                          onClick={() => handleOpenEditForm(met)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -449,6 +588,108 @@ export function LaporanAnggotaView({ initialData, kelompokList }: LaporanAnggota
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Form Create / Edit Progress Dialog */}
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              {editTargetMet ? (
+                <>
+                  <Pencil className="size-5 text-primary" /> Edit Riwayat Progress
+                </>
+              ) : (
+                <>
+                  <Plus className="size-5 text-primary" /> Tambah Riwayat Progress
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {selectedAnggota?.nama} ({selectedAnggota?.kelompok_nama})
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitForm} className="space-y-4 py-2 text-xs">
+            {/* Select / Filter Kating */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Pilih Kating <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                placeholder="Cari nama kating / kelas..."
+                value={katingFilterSearch}
+                onChange={(e) => setKatingFilterSearch(e.target.value)}
+                className="h-8 text-xs mb-1"
+              />
+              <select
+                value={formKatingId}
+                onChange={(e) => setFormKatingId(e.target.value)}
+                required
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs focus:ring-1 focus:ring-primary"
+              >
+                <option value="">-- Pilih Kating --</option>
+                {filteredKatingOptions.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.nama} ({k.jenis_kelamin === "L" ? "Akang" : "Teteh"}) - {k.kelas}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tanggal Input */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Tanggal Sesi <span className="text-rose-500">*</span>
+              </label>
+              <Input
+                type="date"
+                value={formTanggal}
+                onChange={(e) => setFormTanggal(e.target.value)}
+                required
+                className="h-9 text-xs"
+              />
+            </div>
+
+            {/* Slot Dropdown */}
+            <div className="space-y-1.5">
+              <label className="font-semibold text-foreground">
+                Slot Waktu <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={formSlotId}
+                onChange={(e) => setFormSlotId(e.target.value)}
+                required
+                className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs focus:ring-1 focus:ring-primary"
+              >
+                {slotOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nama_slot} ({s.jam_mulai} - {s.jam_selesai})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isSubmittingForm}
+                onClick={() => setIsFormOpen(false)}
+              >
+                Batal
+              </Button>
+              <Button type="submit" size="sm" disabled={isSubmittingForm} className="bg-primary">
+                {isSubmittingForm
+                  ? "Menyimpan..."
+                  : editTargetMet
+                  ? "Simpan Perubahan"
+                  : "Simpan Riwayat"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog
